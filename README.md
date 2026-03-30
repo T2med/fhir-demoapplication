@@ -1,4 +1,4 @@
-# T2demo Custom URL App
+# T2demo Custom-URL App
 
 Diese Demo-Applikation demonstriert die Verarbeitung von Custom URL Schemes unter macOS und Windows/Linux.
 
