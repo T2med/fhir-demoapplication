@@ -1,93 +1,158 @@
-# Demoapplikation
+# T2demo Custom URL App
 
+Diese Demo-Applikation demonstriert die Verarbeitung von Custom URL Schemes unter macOS und Windows/Linux.
 
+## Funktionsweise
+Die Applikation zeigt die aufgerufene URL und die darin enthaltenen Query-Parameter an. Sie kann über das Protokoll `T2demo://` aufgerufen werden.
 
-## Getting started
+## Gradle-Projekt und App-Bundle Erstellung (macOS)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+Damit das Betriebssystem auf den Aufruf `open T2demo://...` reagiert, muss die App als macOS-Bundle (`.app`) registriert sein. Da wir Gradle nutzen, ist der Prozess nun wie folgt:
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### 1. Die Applikation als JAR bauen (Fat JAR)
+Du kannst die JAR-Datei direkt aus IntelliJ IDEA heraus erstellen:
+1. Öffne das **Gradle-Tool Window** (rechts an der Seite).
+2. Navigiere zu `Tasks` -> `build` -> `jar`.
+3. Führe den Task per Doppelklick aus.
+*Die JAR-Datei wird unter `build/libs/Demoapplikation-1.0-SNAPSHOT.jar` erstellt.*
 
-## Add your files
+**Sollte `./gradlew` im Terminal fehlen:**
+Da du Gradle installiert hast, aber der Wrapper (`gradlew`) fehlt, kannst du ihn so in IDEA generieren:
+- Rechtsklick auf das Projekt -> `Gradle` -> `Reload Gradle Project`.
+- Oder im Terminal: `gradle wrapper` (sofern `gradle` in deinem PATH liegt).
+- Sobald die Dateien `gradlew` und der Ordner `gradle/` existieren, kannst du `./gradlew jar` nutzen.
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
+Alternativ über das Terminal (wenn der Wrapper vorhanden ist):
+```bash
+./gradlew jar
 ```
-cd existing_repo
-git remote add origin https://git.t2med.eu/oliver.harwart/demoapplikation.git
-git branch -M main
-git push -uf origin main
+
+### 2. Das App-Bundle mit `jpackage` erstellen
+`jpackage` (ab JDK 14) nutzt nun die von Gradle erstellte JAR-Datei:
+```bash
+jpackage --input build/libs/ \
+         --dest out/ \
+         --name "T2demoApp" \
+         --main-jar Demoapplikation-1.0-SNAPSHOT.jar \
+         --main-class MainKt \
+         --type app-image
+```
+*Die App liegt nun unter `out/T2demoApp.app`.*
+
+### 3. Das URL-Scheme in der Info.plist registrieren
+Damit macOS weiß, dass diese App für `T2demo://` zuständig ist, muss die Datei `out/T2demoApp.app/Contents/Info.plist` angepasst werden.
+
+**Öffne die Datei (z.B. mit TextEdit) und füge vor dem letzten `</dict>` folgendes ein:**
+```xml
+<key>CFBundleURLTypes</key>
+<array>
+    <dict>
+        <key>CFBundleURLName</key>
+        <string>T2demo Handler</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+            <string>T2demo</string>
+        </array>
+    </dict>
+</array>
 ```
 
-## Integrate with your tools
+### 4. Die App registrieren
+Verschiebe die `T2demoApp.app` einmal in deinen Programme-Ordner (`/Applications`) oder starte sie einmal manuell per Doppelklick. Dadurch registriert macOS das neue URL-Scheme.
 
-* [Set up project integrations](https://git.t2med.eu/oliver.harwart/demoapplikation/-/settings/integrations)
+### 5. Den Aufruf testen
+Jetzt kannst du im Terminal testen, ob es funktioniert:
+```bash
+open "T2demo://hallo/welt?status=erfolgreich"
+```
+*Die App sollte sich öffnen (falls noch nicht offen) und die URL-Daten in der GUI anzeigen.*
 
-## Collaborate with your team
+---
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Windows Inbetriebnahme (für T2demo://)
 
-## Test and Deploy
+Unter Windows erfolgt die Registrierung eines Custom URL Schemes über die Windows Registry.
 
-Use the built-in continuous integration in GitLab.
+### 1. Das Programm mit `jpackage` paketieren
+Erstelle einen MSI-Installer oder ein EXE-Paket:
+```powershell
+jpackage --input build/libs/ `
+         --dest out/ `
+         --name "T2demoApp" `
+         --main-jar Demoapplikation-1.0-SNAPSHOT.jar `
+         --main-class MainKt `
+         --type msi `
+         --win-shortcut `
+         --win-menu
+```
+*Installiere die App anschließend über die erzeugte `.msi` Datei.*
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+### 2. Das URL-Scheme in der Registry registrieren
+Damit Windows weiß, dass `T2demo://` von deiner App verarbeitet werden soll, erstelle eine Datei namens `T2demo.reg` mit folgendem Inhalt (Pfade ggf. anpassen):
 
-***
+```reg
+Windows Registry Editor Version 5.00
 
-# Editing this README
+[HKEY_CLASSES_ROOT\T2demo]
+@="URL:T2demo Protocol"
+"URL Protocol"=""
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+[HKEY_CLASSES_ROOT\T2demo\shell]
 
-## Suggestions for a good README
+[HKEY_CLASSES_ROOT\T2demo\shell\open]
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+[HKEY_CLASSES_ROOT\T2demo\shell\open\command]
+@="\"C:\\Program Files\\T2demoApp\\T2demoApp.exe\" \"%1\""
+```
+*Führe die `.reg` Datei per Doppelklick aus, um die Einträge hinzuzufügen.*
 
-## Name
-Choose a self-explaining name for your project.
+### 3. Den Aufruf testen
+Du kannst den Aufruf über die Eingabeaufforderung (CMD) oder den "Ausführen"-Dialog (Win+R) testen:
+```cmd
+start T2demo://test/windows?user=Admin
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+---
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## Linux Inbetriebnahme (für T2demo://)
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Unter Linux (Gnome/KDE/XFCE) erfolgt die Registrierung über eine `.desktop` Datei und `xdg-settings`.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+### 1. Das Programm mit `jpackage` paketieren
+Erstelle ein DEB oder RPM Paket (je nach Distribution):
+```bash
+jpackage --input build/libs/ \
+         --dest out/ \
+         --name "t2demo-app" \
+         --main-jar Demoapplikation-1.0-SNAPSHOT.jar \
+         --main-class MainKt \
+         --type deb
+```
+*Installiere das Paket (z.B. mit `sudo dpkg -i out/t2demo-app_1.0_amd64.deb`).*
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+### 2. Den Desktop-Eintrag konfigurieren
+Falls der Installer die Registrierung nicht automatisch übernimmt, erstelle die Datei `~/.local/share/applications/t2demo.desktop`:
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```ini
+[Desktop Entry]
+Name=T2demo App
+Exec=/usr/bin/t2demo-app %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/T2demo;
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### 3. Das URL-Scheme registrieren
+Führe folgende Befehle im Terminal aus:
+```bash
+# MIME-Type Datenbank aktualisieren
+update-desktop-database ~/.local/share/applications/
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+# Als Standard-Handler für T2demo festlegen
+xdg-settings set default-url-scheme-handler T2demo t2demo.desktop
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### 4. Den Aufruf testen
+```bash
+xdg-open "T2demo://linux/test?os=ubuntu"
+```
