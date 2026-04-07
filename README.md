@@ -1,158 +1,192 @@
-# T2demo Custom-URL App
+# T2med FHIR-API-Demo
 
-Diese Demo-Applikation demonstriert die Verarbeitung von Custom URL Schemes unter macOS und Windows/Linux.
+Diese Demoapplikation ist eine Desktop-Referenz für die Deep-Link-basierte Anbindung eines Drittanbieters an die externe T2med-FHIR-API. Sie verarbeitet einen `T2demo://`-Aufruf, extrahiert den API-Kontext aus der URL und stellt anschließend typische FHIR-Lese- und Schreiboperationen gegen einen APS-FHIR-Endpunkt bereit.
 
-## Funktionsweise
-Die Applikation zeigt die aufgerufene URL und die darin enthaltenen Query-Parameter an. Sie kann über das Protokoll `T2demo://` aufgerufen werden.
+Die README beschreibt den aktuellen Implementierungsstand der Demo. Fachliche Integrationsdetails und HTTP-Beispiele stehen zusätzlich im [Integrationsleitfaden-FHIR-API.md](./Integrationsleitfaden-FHIR-API.md).
 
-## Gradle-Projekt und App-Bundle Erstellung (macOS)
+## Was die Demo aktuell kann
 
-Damit das Betriebssystem auf den Aufruf `open T2demo://...` reagiert, muss die App als macOS-Bundle (`.app`) registriert sein. Da wir Gradle nutzen, ist der Prozess nun wie folgt:
+### Deep-Link-Verarbeitung
 
-### 1. Die Applikation als JAR bauen (Fat JAR)
-Du kannst die JAR-Datei direkt aus IntelliJ IDEA heraus erstellen:
-1. Öffne das **Gradle-Tool Window** (rechts an der Seite).
-2. Navigiere zu `Tasks` -> `build` -> `jar`.
-3. Führe den Task per Doppelklick aus.
-*Die JAR-Datei wird unter `build/libs/Demoapplikation-1.0-SNAPSHOT.jar` erstellt.*
+Die App startet über ein Custom-URL-Scheme und wertet diese Query-Parameter aus:
 
-**Sollte `./gradlew` im Terminal fehlen:**
-Da du Gradle installiert hast, aber der Wrapper (`gradlew`) fehlt, kannst du ihn so in IDEA generieren:
-- Rechtsklick auf das Projekt -> `Gradle` -> `Reload Gradle Project`.
-- Oder im Terminal: `gradle wrapper` (sofern `gradle` in deinem PATH liegt).
-- Sobald die Dateien `gradlew` und der Ordner `gradle/` existieren, kannst du `./gradlew jar` nutzen.
+- `kontextId`
+- `fhirBasisUrl`
+- `oAuthToken`
 
-Alternativ über das Terminal (wenn der Wrapper vorhanden ist):
+Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Parameter werden sichtbar gemacht. Wenn `fhirBasisUrl` und `oAuthToken` vorhanden sind, initialisiert die App automatisch einen `FhirService`.
+
+Beispiel:
+
+```text
+T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=<OAUTH_TOKEN>
+```
+
+### GUI-Demoaktionen
+
+Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
+
+- Patient über Kontext-Identifier suchen
+- `Observation` mit Profil `Befund` anlegen
+- `Condition` für eine Diagnose anlegen
+- `Procedure` mit Profil `Therapie` anlegen
+- `DocumentReference` für Freitext anlegen
+- FHIR-Transaction-Bundle mit `Observation` und `Condition` senden
+
+### Bereits implementierte, bisher kaum dokumentierte Anwendungsfälle
+
+Zusätzlich zur GUI sind im `FhirService` weitere Fälle implementiert und über Tests abgedeckt:
+
+- Patient per Name, Vorname und Geburtsdatum suchen
+- Patient per logischer FHIR-ID lesen
+- `Observation` in den Typen `befund`, `anamnese`, `freitext` anlegen
+- `Procedure` in den Typen `therapie`, `prozedere` anlegen
+- Ressourcen als FHIR-Transaction-Bundle gebündelt anlegen
+
+## Technischer Ablauf
+
+1. APS startet den Drittanbieter über einen Deep Link.
+2. Die Demo extrahiert `kontextId`, `fhirBasisUrl` und `oAuthToken`.
+3. Für `https://`-Basis-URLs wird ein eigener HTTP-/SSL-Client konfiguriert, der auch installationsspezifische lokale Zertifikate akzeptiert.
+4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api`.
+5. Kontextgebundene Ressourcen erhalten automatisch den Identifier `https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`.
+
+## FHIR-Konfiguration
+
+### Erwartete Header
+
+Die Demo setzt für Requests diese Header:
+
+- `Authorization: Bearer <oAuthToken>`
+- `Prefer: return=OperationOutcome`
+- `X-API-Key: <API_KEY>`
+- `X-TreatWarningAsError: true`
+
+Für `Patient`-Read und `Patient`-Search wird zusätzlich gesetzt:
+
+- `X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0`
+
+### Verwendete Profile
+
+- `Patient`: `https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0`
+- `Observation Befund`: `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund|1.0.0`
+- `Observation Anamnese`: `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese|1.0.0`
+- `Observation Freitext`: `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext|1.0.0`
+- `Condition Diagnose`: `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose|1.0.0`
+- `Procedure Therapie`: `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie|1.0.0`
+- `Procedure Prozedere`: `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere|1.0.0`
+- `DocumentReference Freitext`: `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceFreitext|1.0.0`
+
+### Kontext-Identifier
+
+Kontextgebundene Ressourcen verwenden:
+
+- `identifier.system = https://fhir.t2med.de/identifier/kontext`
+- `identifier.value = <kontextId>`
+
+## Wichtige Demo-Einschränkungen und Hinweise
+
+- Der API-Key ist in der GUI-Initialisierung derzeit fest im Code hinterlegt. Das ist nur für eine Demo geeignet, nicht für den Produktionseinsatz.
+- Die App ist auf manuelle Bedienung und Sichtprüfung ausgelegt, nicht auf headless Betrieb.
+- Die SSL-Strategie akzeptiert für `https://` bewusst auch lokale, installationsspezifische Zertifikate. Das passt zum lokalen APS-Szenario und ist sicherheitsseitig eine Integrationsentscheidung.
+
+## Build und Start
+
+### Voraussetzungen
+
+- JDK 11 für Build und Laufzeit
+- `jpackage` auf dem Systempfad, wenn ein natives Paket oder App-Image erzeugt werden soll
+
+### JAR bauen
+
 ```bash
 ./gradlew jar
 ```
 
-### 2. Das App-Bundle mit `jpackage` erstellen
-`jpackage` (ab JDK 14) nutzt nun die von Gradle erstellte JAR-Datei:
+Die Fat JAR liegt danach unter:
+
+```text
+build/libs/Demoapplikation-1.0-SNAPSHOT.jar
+```
+
+### Tests ausführen
+
 ```bash
-jpackage --input build/libs/ \
-         --dest out/ \
-         --name "T2demoApp" \
-         --main-jar Demoapplikation-1.0-SNAPSHOT.jar \
-         --main-class MainKt \
-         --type app-image
-```
-*Die App liegt nun unter `out/T2demoApp.app`.*
-
-### 3. Das URL-Scheme in der Info.plist registrieren
-Damit macOS weiß, dass diese App für `T2demo://` zuständig ist, muss die Datei `out/T2demoApp.app/Contents/Info.plist` angepasst werden.
-
-**Öffne die Datei (z.B. mit TextEdit) und füge vor dem letzten `</dict>` folgendes ein:**
-```xml
-<key>CFBundleURLTypes</key>
-<array>
-    <dict>
-        <key>CFBundleURLName</key>
-        <string>T2demo Handler</string>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <string>T2demo</string>
-        </array>
-    </dict>
-</array>
+./gradlew test
 ```
 
-### 4. Die App registrieren
-Verschiebe die `T2demoApp.app` einmal in deinen Programme-Ordner (`/Applications`) oder starte sie einmal manuell per Doppelklick. Dadurch registriert macOS das neue URL-Scheme.
+### Native App paketieren
 
-### 5. Den Aufruf testen
-Jetzt kannst du im Terminal testen, ob es funktioniert:
 ```bash
-open "T2demo://hallo/welt?status=erfolgreich"
+./gradlew packageApp
 ```
-*Die App sollte sich öffnen (falls noch nicht offen) und die URL-Daten in der GUI anzeigen.*
 
----
+Der Task verwendet je nach Betriebssystem `jpackage`:
 
-## Windows Inbetriebnahme (für T2demo://)
+- macOS: App-Image `out/T2demoApp.app`
+- Windows: MSI-Paket in `out/`
+- Linux: DEB-Paket in `out/`
 
-Unter Windows erfolgt die Registrierung eines Custom URL Schemes über die Windows Registry.
+Optional:
 
-### 1. Das Programm mit `jpackage` paketieren
-Erstelle einen MSI-Installer oder ein EXE-Paket:
-```powershell
-jpackage --input build/libs/ `
-         --dest out/ `
-         --name "T2demoApp" `
-         --main-jar Demoapplikation-1.0-SNAPSHOT.jar `
-         --main-class MainKt `
-         --type msi `
-         --win-shortcut `
-         --win-menu
+```bash
+./gradlew installApp
 ```
-*Installiere die App anschließend über die erzeugte `.msi` Datei.*
 
-### 2. Das URL-Scheme in der Registry registrieren
-Damit Windows weiß, dass `T2demo://` von deiner App verarbeitet werden soll, erstelle eine Datei namens `T2demo.reg` mit folgendem Inhalt (Pfade ggf. anpassen):
+## URL-Scheme-Registrierung
 
-```reg
-Windows Registry Editor Version 5.00
+### macOS
 
-[HKEY_CLASSES_ROOT\T2demo]
-@="URL:T2demo Protocol"
-"URL Protocol"=""
+Das URL-Scheme `T2demo://` ist in der Vorlage [src/main/resources/macos/Info.plist](./src/main/resources/macos/Info.plist) hinterlegt. `packageApp` merged diese Einträge in das erzeugte App-Bundle. Danach muss die App einmal gestartet oder nach `/Applications` verschoben werden, damit macOS den Handler registriert.
 
-[HKEY_CLASSES_ROOT\T2demo\shell]
+Test:
 
-[HKEY_CLASSES_ROOT\T2demo\shell\open]
-
-[HKEY_CLASSES_ROOT\T2demo\shell\open\command]
-@="\"C:\\Program Files\\T2demoApp\\T2demoApp.exe\" \"%1\""
+```bash
+open "T2demo://demo/start?kontextId=test&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=test-token"
 ```
-*Führe die `.reg` Datei per Doppelklick aus, um die Einträge hinzuzufügen.*
 
-### 3. Den Aufruf testen
-Du kannst den Aufruf über die Eingabeaufforderung (CMD) oder den "Ausführen"-Dialog (Win+R) testen:
+### Windows
+
+Das Paket wird über `jpackage` als MSI gebaut. Falls die URL-Scheme-Registrierung nicht durch den Installer abgedeckt ist, muss ein Registry-Eintrag für `T2demo` gesetzt werden, der auf die installierte EXE zeigt.
+
+Beispielaufruf:
+
 ```cmd
-start T2demo://test/windows?user=Admin
+start T2demo://demo/start?kontextId=test
 ```
 
----
+### Linux
 
-## Linux Inbetriebnahme (für T2demo://)
+Unter Linux erfolgt die Registrierung typischerweise über eine `.desktop`-Datei mit `x-scheme-handler/T2demo` und anschließende Zuordnung über `xdg-settings`.
 
-Unter Linux (Gnome/KDE/XFCE) erfolgt die Registrierung über eine `.desktop` Datei und `xdg-settings`.
+Beispielaufruf:
 
-### 1. Das Programm mit `jpackage` paketieren
-Erstelle ein DEB oder RPM Paket (je nach Distribution):
 ```bash
-jpackage --input build/libs/ \
-         --dest out/ \
-         --name "t2demo-app" \
-         --main-jar Demoapplikation-1.0-SNAPSHOT.jar \
-         --main-class MainKt \
-         --type deb
-```
-*Installiere das Paket (z.B. mit `sudo dpkg -i out/t2demo-app_1.0_amd64.deb`).*
-
-### 2. Den Desktop-Eintrag konfigurieren
-Falls der Installer die Registrierung nicht automatisch übernimmt, erstelle die Datei `~/.local/share/applications/t2demo.desktop`:
-
-```ini
-[Desktop Entry]
-Name=T2demo App
-Exec=/usr/bin/t2demo-app %u
-Type=Application
-Terminal=false
-MimeType=x-scheme-handler/T2demo;
+xdg-open "T2demo://demo/start?kontextId=test"
 ```
 
-### 3. Das URL-Scheme registrieren
-Führe folgende Befehle im Terminal aus:
-```bash
-# MIME-Type Datenbank aktualisieren
-update-desktop-database ~/.local/share/applications/
+## Tests und Verifikation
 
-# Als Standard-Handler für T2demo festlegen
-xdg-settings set default-url-scheme-handler T2demo t2demo.desktop
-```
+Die Test-Suite deckt drei Ebenen ab:
 
-### 4. Den Aufruf testen
-```bash
-xdg-open "T2demo://linux/test?os=ubuntu"
-```
+- `FhirServiceTest`: Unit-Tests für Such-, Create- und Transaction-Verhalten
+- `FhirServiceSslTest`: Verifikation der HTTP-/HTTPS-Konfiguration
+- `FhirServiceIntegrationTest`: Live-Test gegen einen laufenden lokalen APS-/FHIR-Server
+
+Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte für Basis-URL, Kontext und Token. Ohne passende Umgebung ist er nicht stabil CI-tauglich.
+
+## Empfohlener Schnelltest
+
+  1. JAR oder natives Paket bauen.
+  2. App starten oder als URL-Handler registrieren.
+  3. Im APS-Client:
+     1. Das Benutzerrecht ```Administration|Externe API Drittanbieter-Zugriffe verwalten``` erteilen.
+     2. Über die Vorgangssuche den Vorgang ```Drittanbieter-Zugriffe verwalten``` öffnen und gewünschte Anbindung auf "grün" setzen.
+     3. In der Button-Leiste Geräteliste öffnen und ```T2demo``` auswählen. Dadurch wird der Deep Link mit `kontextId`, `fhirBasisUrl` und `oAuthToken` aufgerufen.
+  4. In der GUI der Demoapp prüfen, ob der `FhirService` initialisiert wurde.
+  5. Eine oder mehrere Schreiboperationen testen.
+  6. Das `OperationOutcome` bzw. die Bundle-Statuses im Logbereich prüfen.
+
+## Weiterführende Referenz
+
+Für API-Semantik, Fehlercodes, Headerregeln, Profile und Beispielpayloads ist der aktuelle [Integrationsleitfaden-FHIR-API.md](./Integrationsleitfaden-FHIR-API.md) die maßgebliche Fachreferenz.

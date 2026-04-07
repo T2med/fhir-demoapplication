@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-03-23**
+Stand: **2026-03-31**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -30,10 +30,13 @@ Wichtig:
 ### 2.2 Drittanbieter-seitig
 
 - HTTPS-Client für FHIR R4 JSON.
+- Unterstützung für lokale HTTPS-Endpunkte des APS-Servers.
+- Unterstützung für installationsspezifisch erzeugte Server-Zertifikate des lokalen APS-Servers.
 - Konfigurierbare Header:
   - `X-API-Key` als Pflichtheader
   - `X-TreatWarningAsError` optional
   - `X-FHIR-Profile` für `Patient`-Read und `Patient`-Search
+- Auswertung der Deep-Link-Parameter `kontextId`, `fhirBasisUrl`, `oAuthToken`.
 - Unterstützung für `OperationOutcome`.
 
 ## 3. Authentifizierung und Header
@@ -41,6 +44,8 @@ Wichtig:
 Pflichtheader:
 
 - `X-API-Key: <API_KEY>`
+- `Authorization: Bearer <oAuthToken>`
+- `Prefer: return=OperationOutcome`
 
 Optionale Header:
 
@@ -50,6 +55,11 @@ Optionale Header:
 - `X-FHIR-Profile: <profil-url>|1.0.0`
   - wird nur für `Patient`-Read und `Patient`-Search ausgewertet
   - ohne Header wird `https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0` verwendet
+
+Wichtig:
+
+- `oAuthToken` wird vom APS-Client im Deep Link übergeben.
+- `oAuthToken` ist der Parameternamen im Deep Link; in der Response der Kontext-Boundary heißt derselbe Wert `loginToken`.
 
 Typische Fehler:
 
@@ -96,6 +106,8 @@ Kontext-Management und Drittanbieter-Freischaltung erfolgen APS-intern unter `/a
 - Aus Sicht des Drittanbieters erfolgt der Einstieg typischerweise über einen Deep Link aus dem APS-Client.
 - Der Deep Link enthält `kontextId`, `fhirBasisUrl` und `oAuthToken`.
 - Der APS-Client befüllt `oAuthToken` aus dem von `/aps/rest/fhir/api/kontext/anlegen` gelieferten `loginToken`.
+- `fhirBasisUrl` ist unverändert als Basis-URL des FHIR-Clients zu verwenden.
+- `oAuthToken` muss als `Authorization: Bearer <oAuthToken>` mitgesendet werden.
 
 ### 5.2 Schritt 2: Optional Patient laden oder validieren
 
@@ -172,7 +184,13 @@ Implementierungsnahe Besonderheiten:
 ## 9. Sicherheits- und Betriebsaspekte
 
 - API-Key nie im Klartext loggen.
-- TLS erzwingen.
+- TLS für alle FHIR-Aufrufe erzwingen.
+- Die FHIR-API wird im lokalen Installationsfall über `https://` bereitgestellt.
+- Das APS-Server-Zertifikat wird bei der Installation installationsspezifisch erzeugt.
+- Drittanbieter dürfen deshalb nicht voraussetzen, dass das APS-Zertifikat über eine öffentliche CA vertrauenswürdig ist.
+- Bei `fhirBasisUrl` mit `https://` ist ein eigener SSL-Kontext bzw. HTTP-Client zu konfigurieren.
+- Der Drittanbieter-Client muss dabei auch lokale Hosts wie `localhost`, `127.0.0.1` oder den lokal konfigurierten Hostnamen unterstützen.
+- Die Referenzimplementierung setzt für jede `https://`-Basis-URL eine eigene SSL-Konfiguration, damit auch lokal erzeugte Zertifikate des APS-Servers akzeptiert werden können.
 - Kontext-IDs als kurzlebige technische Tokens behandeln.
 - `X-TreatWarningAsError` bewusst setzen. Ohne Header ist das Verhalten identisch zu `true`.
 
@@ -181,6 +199,9 @@ Implementierungsnahe Besonderheiten:
 - [ ] Drittanbieter in APS aktiviert
 - [ ] API-Key vorhanden und sicher hinterlegt
 - [ ] Feature `APS_37950_EXTERNE_FHIR_API_AKTIVIEREN` in der Zielumgebung aktiv
+- [ ] Verarbeitung der Deep-Link-Parameter `kontextId`, `fhirBasisUrl`, `oAuthToken` implementiert
+- [ ] Eigener SSL-Kontext/HTTP-Client für lokale `https://`-APS-Server eingerichtet
+- [ ] Test mit installationsspezifischem lokalem APS-Zertifikat durchgeführt
 - [ ] Test: `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`
 - [ ] Test: gewünschte `POST`-Ressourcentypen mit korrektem `meta.profile`
 - [ ] Test: Fehlerfall ohne oder mit falschem Profil
@@ -190,10 +211,13 @@ Implementierungsnahe Besonderheiten:
 ## 11. Schnellstart (Minimalfluss)
 
 1. Kontext über APS bereitstellen oder übernehmen.
-2. `GET /aps/fhir/api/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>` mit `X-API-Key` ausführen.
-3. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier anlegen.
-4. `OperationOutcome` und HTTP-Status auswerten.
-5. Kontext bei Bedarf entfernen und nicht wiederverwenden.
+2. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
+3. HTTPS-Client für `fhirBasisUrl` mit passender SSL-Konfiguration initialisieren.
+4. `GET /aps/fhir/api/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>` mit `X-API-Key` ausführen.
+5. `Authorization: Bearer <oAuthToken>` und `Prefer: return=OperationOutcome` mitsenden.
+6. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier anlegen.
+7. `OperationOutcome` und HTTP-Status auswerten.
+8. Kontext bei Bedarf entfernen und nicht wiederverwenden.
 
 ## Externe API Request-/Response-Beispiele
 
@@ -213,6 +237,8 @@ Hinweise:
 ```http
 GET https://<HOST>/aps/fhir/api/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 X-TreatWarningAsError: true
 X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
@@ -245,6 +271,8 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 ```http
 GET https://<HOST>/aps/fhir/api/Patient?family=must&given=max&birthdate=1980-04-12
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 ```
@@ -277,6 +305,8 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 ```http
 GET https://<HOST>/aps/fhir/api/Patient/<PATIENT_OBJECT_ID>
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 ```
@@ -303,6 +333,8 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 POST https://<HOST>/aps/fhir/api/Observation
 Content-Type: application/fhir+json
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 X-TreatWarningAsError: true
 
@@ -380,6 +412,8 @@ Zusätzlich mögliche Extension:
 POST https://<HOST>/aps/fhir/api/DocumentReference
 Content-Type: application/fhir+json
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 
 {
@@ -440,6 +474,8 @@ https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere|1.0.0
 POST https://<HOST>/aps/fhir/api/Condition
 Content-Type: application/fhir+json
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 
 {
@@ -479,6 +515,8 @@ X-API-Key: <API_KEY>
 POST https://<HOST>/aps/fhir/api
 Content-Type: application/fhir+json
 Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 
 {
