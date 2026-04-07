@@ -86,8 +86,8 @@ Kontextgebundene Ressourcen verwenden:
 
 ## Wichtige Demo-Einschränkungen und Hinweise
 
-- Für Demo- und Integrationszwecke verwenden alle Partner denselben gemeinsamen Testschlüssel: `T2DEMO_API_KEY="7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE"`.
-- Dieser Testschlüssel ist bewusst nicht geheim und darf offen dokumentiert werden. Er ist ausschließlich für Demo-, Test- und Integrationsumgebungen gedacht, niemals für Produktion.
+- Für Demo- und Integrationszwecke kann folgender Testschlüssel verwendet werden: `T2DEMO_API_KEY="7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE"`.
+- Dieser Testschlüssel ist ausschließlich für Demo-, Test- und Integrationsumgebungen gedacht, niemals für Produktion.
 - Für den Start muss `T2DEMO_API_KEY` oder `-Dt2demo.apiKey=<API_KEY>` gesetzt sein.
 - Die App ist auf manuelle Bedienung und Sichtprüfung ausgelegt, nicht auf headless Betrieb.
 - Die SSL-Strategie akzeptiert für `https://` bewusst auch lokale, installationsspezifische Zertifikate. Das passt zum lokalen APS-Szenario und ist sicherheitsseitig eine Integrationsentscheidung.
