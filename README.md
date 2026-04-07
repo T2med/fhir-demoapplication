@@ -86,7 +86,7 @@ Kontextgebundene Ressourcen verwenden:
 
 ## Wichtige Demo-Einschränkungen und Hinweise
 
-- Der API-Key ist in der GUI-Initialisierung derzeit fest im Code hinterlegt. Das ist nur für eine Demo geeignet, nicht für den Produktionseinsatz.
+- Der API-Key wird nicht im Repository gespeichert. Für den Start muss `T2DEMO_API_KEY` oder `-Dt2demo.apiKey=<API_KEY>` gesetzt sein.
 - Die App ist auf manuelle Bedienung und Sichtprüfung ausgelegt, nicht auf headless Betrieb.
 - Die SSL-Strategie akzeptiert für `https://` bewusst auch lokale, installationsspezifische Zertifikate. Das passt zum lokalen APS-Szenario und ist sicherheitsseitig eine Integrationsentscheidung.
 
@@ -100,6 +100,7 @@ Kontextgebundene Ressourcen verwenden:
 ### JAR bauen
 
 ```bash
+export T2DEMO_API_KEY=<API_KEY>
 ./gradlew jar
 ```
 
@@ -114,6 +115,20 @@ build/libs/Demoapplikation-1.0-SNAPSHOT.jar
 ```bash
 ./gradlew test
 ```
+
+Der Standard-Testlauf enthält nur die CI-tauglichen Unit- und SSL-Tests.
+
+### Integrationstests gezielt ausführen
+
+```bash
+export FHIR_BASE_URL=https://127.0.0.1:16567/aps/fhir/api
+export FHIR_KONTEXT_ID=<KONTEXT_ID>
+export FHIR_OAUTH_TOKEN=<OAUTH_TOKEN>
+export FHIR_API_KEY=<API_KEY>
+./gradlew integrationTest
+```
+
+Ohne diese Variablen werden Integrationstests übersprungen.
 
 ### Native App paketieren
 
@@ -171,9 +186,9 @@ Die Test-Suite deckt drei Ebenen ab:
 
 - `FhirServiceTest`: Unit-Tests für Such-, Create- und Transaction-Verhalten
 - `FhirServiceSslTest`: Verifikation der HTTP-/HTTPS-Konfiguration
-- `FhirServiceIntegrationTest`: Live-Test gegen einen laufenden lokalen APS-/FHIR-Server
+- `FhirServiceIntegrationTest`: opt-in Live-Test gegen einen laufenden lokalen APS-/FHIR-Server
 
-Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte für Basis-URL, Kontext und Token. Ohne passende Umgebung ist er nicht stabil CI-tauglich.
+Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte für Basis-URL, Kontext, Token und API-Key. Er ist deshalb vom Standardlauf getrennt und für lokale Verifikation gedacht.
 
 ## Empfohlener Schnelltest
 

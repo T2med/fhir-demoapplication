@@ -53,6 +53,9 @@ class DemoApp : JFrame("T2demo Custom URL App") {
     private var fhirBasisUrl: String? = null
     private var oAuthToken: String? = null
     private var fhirService: FhirService? = null
+    private val apiKey: String? =
+        System.getProperty(AppConstants.SYS_PROP_API_KEY)?.takeIf { it.isNotBlank() }
+            ?: System.getenv(AppConstants.ENV_API_KEY)?.takeIf { it.isNotBlank() }
 
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
@@ -310,10 +313,13 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                 }
             }
 
-            if (fhirBasisUrl != null && oAuthToken != null) {
-                fhirService = FhirService(fhirBasisUrl!!, "7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE", oAuthToken!!)
+            if (fhirBasisUrl != null && oAuthToken != null && apiKey != null) {
+                fhirService = FhirService(fhirBasisUrl!!, apiKey, oAuthToken!!)
                 log("FHIR-Service initialisiert für $fhirBasisUrl")
                 logger.info("FHIR-Service initialisiert für {}", fhirBasisUrl)
+            } else if (apiKey == null) {
+                log(AppConstants.ERROR_API_KEY_MISSING)
+                logger.warn("FHIR-Service nicht initialisiert: API-Key fehlt")
             } else {
                 log("FHIR-Service konnte nicht initialisiert werden (fhirBasisUrl oder oAuthToken fehlt)")
             }

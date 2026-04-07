@@ -1,28 +1,29 @@
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.BeforeAll
-import org.hl7.fhir.r4.model.Patient
 import kotlin.test.assertNotNull
-import kotlin.test.assertNull
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
-import java.security.cert.X509Certificate
 
 class FhirServiceIntegrationTest {
-
-    private val fhirBasisUrl = "https://127.0.0.1:16567/aps/fhir/api"
-    private val kontextId = "7Cc9de760f-7cf1-4758-aaa9-c067e4bb7b4d"
-    private val oAuthToken = "hSHJhjdhfdjsgfADJfh2A"
-    private val apiKey = "dummy-api-key" // Im ISSUE DESCRIPTION nicht explizit genannt, aber FhirService benötigt einen
+    private val fhirBasisUrl = System.getenv("FHIR_BASE_URL")
+    private val kontextId = System.getenv("FHIR_KONTEXT_ID")
+    private val oAuthToken = System.getenv("FHIR_OAUTH_TOKEN")
+    private val apiKey = System.getenv("FHIR_API_KEY")
 
     @Test
     fun `test searchPatientByKontext on live server`() {
+        assumeTrue(
+            !fhirBasisUrl.isNullOrBlank() &&
+                !kontextId.isNullOrBlank() &&
+                !oAuthToken.isNullOrBlank() &&
+                !apiKey.isNullOrBlank(),
+            "FHIR integration test skipped: set FHIR_BASE_URL, FHIR_KONTEXT_ID, FHIR_OAUTH_TOKEN and FHIR_API_KEY."
+        )
+
         println("[DEBUG_LOG] Initialisiere FhirService mit $fhirBasisUrl")
-        val service = FhirService(fhirBasisUrl, apiKey, oAuthToken)
+        val service = FhirService(fhirBasisUrl!!, apiKey!!, oAuthToken!!)
 
         println("[DEBUG_LOG] Suche Patient für Kontext $kontextId...")
         try {
-            val patient = service.searchPatientByKontext(kontextId)
+            val patient = service.searchPatientByKontext(kontextId!!)
             
             if (patient != null) {
                 println("[DEBUG_LOG] Patient gefunden: ID=${patient.idElement.idPart}")
