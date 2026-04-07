@@ -190,3 +190,7 @@ Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte 
 ## Weiterführende Referenz
 
 Für API-Semantik, Fehlercodes, Headerregeln, Profile und Beispielpayloads ist der aktuelle [Integrationsleitfaden-FHIR-API.md](./Integrationsleitfaden-FHIR-API.md) die maßgebliche Fachreferenz.
+
+## Lizenz
+
+Dieses Projekt ist unter der Apache License 2.0 lizenziert. Copyright 2026 T2med GmbH & Co. KG.
