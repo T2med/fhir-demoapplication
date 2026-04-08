@@ -30,14 +30,9 @@ object AppConstants {
     // Logging and Error Messages
     const val ERROR_KONTEXT_ID_MISSING = "Fehler: Keine kontextId vorhanden"
     const val ERROR_FHIR_SERVICE_NOT_INITIALIZED = "Fehler: FhirService nicht initialisiert"
-    const val ERROR_API_KEY_MISSING = "Fehler: API-Key fehlt. Setze T2DEMO_API_KEY oder -Dt2demo.apiKey."
     
     // Query Parameters
     const val QUERY_PARAM_KONTEXT_ID = "kontextId"
     const val QUERY_PARAM_FHIR_BASIS_URL = "fhirBasisUrl"
     const val QUERY_PARAM_OAUTH_TOKEN = "oAuthToken"
-
-    // Runtime Configuration
-    const val ENV_API_KEY = "T2DEMO_API_KEY"
-    const val SYS_PROP_API_KEY = "t2demo.apiKey"
 }

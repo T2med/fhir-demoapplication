@@ -6,20 +6,19 @@ class FhirServiceIntegrationTest {
     private val fhirBasisUrl = System.getenv("FHIR_BASE_URL")
     private val kontextId = System.getenv("FHIR_KONTEXT_ID")
     private val oAuthToken = System.getenv("FHIR_OAUTH_TOKEN")
-    private val apiKey = System.getenv("FHIR_API_KEY")
+    private val apiKey = "dummy-api-key"
 
     @Test
     fun `test searchPatientByKontext on live server`() {
         assumeTrue(
             !fhirBasisUrl.isNullOrBlank() &&
                 !kontextId.isNullOrBlank() &&
-                !oAuthToken.isNullOrBlank() &&
-                !apiKey.isNullOrBlank(),
-            "FHIR integration test skipped: set FHIR_BASE_URL, FHIR_KONTEXT_ID, FHIR_OAUTH_TOKEN and FHIR_API_KEY."
+                !oAuthToken.isNullOrBlank(),
+            "FHIR integration test skipped: set FHIR_BASE_URL, FHIR_KONTEXT_ID and FHIR_OAUTH_TOKEN."
         )
 
         println("[DEBUG_LOG] Initialisiere FhirService mit $fhirBasisUrl")
-        val service = FhirService(fhirBasisUrl!!, apiKey!!, oAuthToken!!)
+        val service = FhirService(fhirBasisUrl!!, apiKey, oAuthToken!!)
 
         println("[DEBUG_LOG] Suche Patient für Kontext $kontextId...")
         try {
