@@ -36,6 +36,7 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
+    exclude("**/*IntegrationTest.class")
 
     // Deaktiviere SSL-Validierung für Tests (für selbstsignierte Zertifikate)
     systemProperty("javax.net.ssl.trustAll", "true")
@@ -44,6 +45,22 @@ tasks.test {
 
     // Verbose SSL Debug
     // systemProperty("javax.net.debug", "ssl,handshake")
+}
+
+val integrationTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Fuehrt nur die opt-in Integrationstests gegen einen laufenden FHIR-Endpunkt aus."
+    useJUnitPlatform()
+    include("**/*IntegrationTest.class")
+    shouldRunAfter(tasks.test)
+
+    systemProperty("javax.net.ssl.trustAll", "true")
+    systemProperty("com.sun.net.ssl.checkRevocation", "false")
+    systemProperty("sun.security.ssl.allowUnsafeRenegotiation", "true")
+}
+
+tasks.check {
+    dependsOn(tasks.test)
 }
 
 application {
