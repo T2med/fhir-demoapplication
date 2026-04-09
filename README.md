@@ -95,8 +95,8 @@ Kontextgebundene Ressourcen verwenden:
 
 ### Voraussetzungen
 
-- JDK 11 für Build und Laufzeit
-- `jpackage` auf dem Systempfad, wenn ein natives Paket oder App-Image erzeugt werden soll
+- JDK 21 für Build und Laufzeit
+- `jpackage` aus einem JDK-21-Setup auf dem Systempfad, wenn ein natives Paket oder App-Image erzeugt werden soll
 
 ### JAR bauen
 

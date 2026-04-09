@@ -77,7 +77,7 @@ tasks.jar {
 }
 
 kotlin {
-    jvmToolchain(11)
+    jvmToolchain(21)
 }
 
 val appName = "T2demoApp"
