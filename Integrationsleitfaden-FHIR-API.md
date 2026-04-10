@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-03-31**
+Stand: **2026-04-08**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -58,13 +58,20 @@ Optionale Header:
 
 Wichtig:
 
-- `oAuthToken` wird vom APS-Client im Deep Link übergeben.
+- `oAuthToken` wird nur dann vom APS-Client im Deep Link übergeben, wenn bei der Kontext-Anlage ein `loginToken` erzeugt wurde.
 - `oAuthToken` ist der Parameternamen im Deep Link; in der Response der Kontext-Boundary heißt derselbe Wert `loginToken`.
+- Ein `loginToken` wird nur für bekannte, aktivierte Produkte mit hinterlegter `clientId` erzeugt.
 
 Typische Fehler:
 
 - `403 Forbidden`: API-Key fehlt oder ist ungültig.
 - `503 Service Unavailable`: FHIR-API ist per Feature-Flag nicht freigeschaltet.
+
+Hinweise aus der Kontext-Anlage:
+
+- Unbekanntes Produkt: Kontext-Anlage liefert Validierungsfehler.
+- Nicht aktiviertes Produkt: Kontext-Anlage liefert Validierungsfehler.
+- Aktiviertes Produkt ohne Auth-Registrierung: Kontext wird angelegt, aber `loginToken` bleibt leer und es wird ein Info-Hinweis zurückgegeben.
 
 ## 4. Endpunktübersicht (Drittanbietersicht)
 
@@ -93,6 +100,7 @@ Profilübersicht:
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` | `create` |
 | DocumentReference | `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceFreitext\|1.0.0` | `create` |
+| DocumentReference | `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceAnhang\|1.0.0` | `create` |
 
 Kontext-Management und Drittanbieter-Freischaltung erfolgen APS-intern unter `/aps/rest/fhir/api/...`.
 
@@ -101,13 +109,14 @@ Kontext-Management und Drittanbieter-Freischaltung erfolgen APS-intern unter `/a
 ### 5.1 Schritt 1: Kontext bereitstellen lassen
 
 - Kontext wird über die APS-interne Boundary `/aps/rest/fhir/api/kontext/anlegen` erzeugt.
-- Pflichtfelder dort: `patientId`, `arztrolleId`, `behandlungsortId`.
-- Die Response liefert `kontext`, `fhirApiBase` und bei Erfolg zusätzlich einen `loginToken`.
+- Pflichtfelder dort: `hersteller`, `produkt`, `patientId`, `arztrolleId`, `behandlungsortId`.
+- Optionales Feld dort: `behandlungsfallId`.
+- Die Response liefert `kontext`, `fhirApiBase` und abhängig vom Produkt zusätzlich einen `loginToken`.
 - Aus Sicht des Drittanbieters erfolgt der Einstieg typischerweise über einen Deep Link aus dem APS-Client.
 - Der Deep Link enthält `kontextId`, `fhirBasisUrl` und `oAuthToken`.
 - Der APS-Client befüllt `oAuthToken` aus dem von `/aps/rest/fhir/api/kontext/anlegen` gelieferten `loginToken`.
 - `fhirBasisUrl` ist unverändert als Basis-URL des FHIR-Clients zu verwenden.
-- `oAuthToken` muss als `Authorization: Bearer <oAuthToken>` mitgesendet werden.
+- Wenn `oAuthToken` mitgeliefert wird, ist es als `Authorization: Bearer <oAuthToken>` mitzusenden.
 
 ### 5.2 Schritt 2: Optional Patient laden oder validieren
 
@@ -122,13 +131,23 @@ Je nach Anwendungsfall:
 - `Observation` für Anamnese, Befund oder Freitext
 - `Condition` für Diagnosen
 - `Procedure` für Therapie oder Prozedere
-- `DocumentReference` für Freitext über Attachment
+- `DocumentReference` für Freitext
+- `DocumentReference` für eingebettete Anhänge/Datei-Upload
 
 Für alle kontextgebundenen Ressourcen gilt:
 
 - `identifier.system = https://fhir.t2med.de/identifier/kontext`
 - `identifier.value = <KONTEXT_ID>`
 - `meta.profile[0]` muss ein unterstütztes Profil enthalten
+
+Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt zusätzlich:
+
+- `description` ist Pflicht.
+- `content[0].attachment.data` muss den Base64-kodierten Anhang enthalten.
+- `content[0].attachment.contentType` ist Pflicht.
+- `content[0].attachment.title` ist optional.
+- Der Zeitpunkt wird bevorzugt aus `content[0].attachment.creation`, ersatzweise aus `DocumentReference.date` gelesen.
+- Optional kann die Extension `https://fhir.t2med.de/StructureDefinition/FhirApiAnhangKuerzel` gesetzt werden.
 
 ### 5.4 Schritt 4: Optional als Transaction bündeln
 
@@ -153,6 +172,7 @@ Für alle kontextgebundenen Ressourcen gilt:
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` |
 | DocumentReference | `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceFreitext\|1.0.0` |
+| DocumentReference | `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceAnhang\|1.0.0` |
 
 ## 7. Fehlerbehandlung und Robustheit
 
@@ -171,6 +191,8 @@ Empfehlungen:
 Implementierungsnahe Besonderheiten:
 
 - `GET /Patient?family=...&given=...&birthdate=...` liefert bei fehlenden Suchparametern aktuell kein `4xx`, sondern ein leeres Suchergebnis.
+- `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` liefert Validierungsfehler, wenn `description`, `attachment.data` oder `attachment.contentType` fehlen.
+- Für `DocumentReference`-Anhänge werden zu langer Beschreibungstext und ein zu langes Kürzel als Warnungen behandelt.
 
 ## 8. Verwendete Code-Systeme (insb. `Condition`)
 
@@ -198,12 +220,13 @@ Implementierungsnahe Besonderheiten:
 
 - [ ] Drittanbieter in APS aktiviert
 - [ ] API-Key vorhanden und sicher hinterlegt
-- [ ] Feature `APS_37950_EXTERNE_FHIR_API_AKTIVIEREN` in der Zielumgebung aktiv
 - [ ] Verarbeitung der Deep-Link-Parameter `kontextId`, `fhirBasisUrl`, `oAuthToken` implementiert
 - [ ] Eigener SSL-Kontext/HTTP-Client für lokale `https://`-APS-Server eingerichtet
 - [ ] Test mit installationsspezifischem lokalem APS-Zertifikat durchgeführt
+- [ ] Test: Aufruf durch T2med-Client über Deep-Link
 - [ ] Test: `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`
 - [ ] Test: gewünschte `POST`-Ressourcentypen mit korrektem `meta.profile`
+- [ ] Test: `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0`
 - [ ] Test: Fehlerfall ohne oder mit falschem Profil
 - [ ] Optional: Transaction-Verhalten mit Rollback geprüft
 - [ ] Monitoring für HTTP-Status und `OperationOutcome` vorhanden
@@ -226,7 +249,7 @@ Hinweise:
 - Alle Beispiele verwenden Platzhalter wie `<HOST>`, `<API_KEY>`, `<KONTEXT_ID>`.
 - Für FHIR JSON sollten `Content-Type` und `Accept` auf `application/fhir+json` gesetzt werden.
 - Bei `create`-Operationen ist `X-FHIR-Profile` nicht erforderlich; maßgeblich ist `meta.profile`.
-- Beim Start aus dem APS-Client wird der Drittanbieter typischerweise zunächst über eine URL der Form `<AUFRUF_PLATZHALTER>://?kontextId=<...>&fhirBasisUrl=<...>&oAuthToken=<...>` geöffnet.
+- Falls ein `loginToken` erzeugt wurde, wird der Drittanbieter typischerweise über eine URL der Form `<AUFRUF_PLATZHALTER>://?kontextId=<...>&fhirBasisUrl=<...>&oAuthToken=<...>` geöffnet.
 
 ### 1. Externe FHIR-HTTP API (`/aps/fhir/api`)
 
@@ -271,7 +294,7 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 ```http
 GET https://<HOST>/aps/fhir/api/Patient?family=must&given=max&birthdate=1980-04-12
 Accept: application/fhir+json
-Authorization: Bearer <OAUTH_TOKEN>
+Authorization: Bearer <OAUTH_TOKEN>  # nur wenn im Deep Link vorhanden
 Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
@@ -444,7 +467,55 @@ X-API-Key: <API_KEY>
 
 **Response**: analog 1.4 (`201` + `OperationOutcome`).
 
-#### 1.8 Procedure anlegen (Therapie)
+#### 1.8 DocumentReference anlegen (Anhang)
+
+**Request**
+
+```http
+POST https://<HOST>/aps/fhir/api/DocumentReference
+Content-Type: application/fhir+json
+Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
+X-API-Key: <API_KEY>
+
+{
+  "resourceType": "DocumentReference",
+  "meta": {
+    "profile": [
+      "https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceAnhang|1.0.0"
+    ]
+  },
+  "identifier": [
+    {
+      "system": "https://fhir.t2med.de/identifier/kontext",
+      "value": "<KONTEXT_ID>"
+    }
+  ],
+  "date": "2026-01-29T08:36:00+01:00",
+  "description": "Befundbericht als PDF",
+  "extension": [
+    {
+      "url": "https://fhir.t2med.de/StructureDefinition/FhirApiAnhangKuerzel",
+      "valueString": "PDF"
+    }
+  ],
+  "content": [
+    {
+      "attachment": {
+        "contentType": "application/pdf",
+        "title": "befundbericht.pdf",
+        "creation": "2026-01-29T08:36:00+01:00",
+        "data": "JVBERi0xLjQKJ..."
+      }
+    }
+  ]
+}
+```
+
+**Response**: analog 1.4 (`201` + `OperationOutcome`).
+
+#### 1.9 Procedure anlegen (Therapie)
 
 Wie 1.4, aber Endpoint `POST /Procedure` und Profil:
 
@@ -458,15 +529,15 @@ Zeitpunkt-Reihenfolge in der Implementierung:
 2. Extension `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureOccurrence`
 3. `performedDateTime`
 
-#### 1.9 Procedure anlegen (Prozedere)
+#### 1.10 Procedure anlegen (Prozedere)
 
-Wie 1.8, aber Profil:
+Wie 1.9, aber Profil:
 
 ```text
 https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere|1.0.0
 ```
 
-#### 1.10 Condition anlegen (Diagnose)
+#### 1.11 Condition anlegen (Diagnose)
 
 **Request**
 
@@ -507,7 +578,7 @@ X-API-Key: <API_KEY>
 
 **Response**: analog 1.4 (`201` + `OperationOutcome`).
 
-#### 1.11 Transaction Bundle
+#### 1.12 Transaction Bundle
 
 **Request**
 
