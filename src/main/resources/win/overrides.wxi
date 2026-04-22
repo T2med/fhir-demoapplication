@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Include>
+    <Component Id="T2demoProtocolHandler" Guid="{73926715-BF2C-4012-9A6E-2F4E2C461306}" Directory="INSTALLDIR">
+        <RegistryKey Root="HKCR" Key="T2demo">
+            <RegistryValue Type="string" Value="URL:T2demo Protocol" />
+            <RegistryValue Name="URL Protocol" Type="string" Value="" />
+            <RegistryKey Key="shell\open\command">
+                <RegistryValue Type="string" Value="&quot;[INSTALLDIR]T2demoApp.exe&quot; &quot;%1&quot;" />
+            </RegistryKey>
+        </RegistryKey>
+    </Component>
+</Include>
