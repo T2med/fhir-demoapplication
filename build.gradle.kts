@@ -127,6 +127,9 @@ tasks.register<Exec>("packageApp") {
     } else if (os.isWindows) {
         commandLine(
             "jpackage",
+            "--verbose",
+            "--vendor", "T2med",
+            "--app-version", "1.0.0",
             "--input", "build/libs/",
             "--dest", "out/",
             "--name", appName,
