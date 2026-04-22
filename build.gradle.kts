@@ -36,7 +36,6 @@ dependencies {
 
 tasks.test {
     useJUnitPlatform()
-    exclude("**/*IntegrationTest.class")
 
     // Deaktiviere SSL-Validierung für Tests (für selbstsignierte Zertifikate)
     systemProperty("javax.net.ssl.trustAll", "true")
@@ -45,22 +44,6 @@ tasks.test {
 
     // Verbose SSL Debug
     // systemProperty("javax.net.debug", "ssl,handshake")
-}
-
-val integrationTest by tasks.registering(Test::class) {
-    group = "verification"
-    description = "Fuehrt nur die opt-in Integrationstests gegen einen laufenden FHIR-Endpunkt aus."
-    useJUnitPlatform()
-    include("**/*IntegrationTest.class")
-    shouldRunAfter(tasks.test)
-
-    systemProperty("javax.net.ssl.trustAll", "true")
-    systemProperty("com.sun.net.ssl.checkRevocation", "false")
-    systemProperty("sun.security.ssl.allowUnsafeRenegotiation", "true")
-}
-
-tasks.check {
-    dependsOn(tasks.test)
 }
 
 application {
@@ -77,7 +60,7 @@ tasks.jar {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(11)
 }
 
 val appName = "T2demoApp"
@@ -128,7 +111,8 @@ tasks.register<Exec>("packageApp") {
             "--main-class", mainClass,
             "--type", "msi",
             "--win-shortcut",
-            "--win-menu"
+            "--win-menu",
+            "--resource-dir", "src/main/resources/win"
         )
     } else {
         // Linux
@@ -139,7 +123,9 @@ tasks.register<Exec>("packageApp") {
             "--name", appName.lowercase(),
             "--main-jar", mainJar,
             "--main-class", mainClass,
-            "--type", "deb"
+            "--type", "deb",
+            "--linux-shortcut",
+            "--linux-menu"
         )
     }
 
@@ -210,6 +196,38 @@ tasks.register<Exec>("packageApp") {
                         tempFile.delete()
                     }
                 }
+            } else if (os.isWindows) {
+                // Die Registry-Einträge werden nun direkt im MSI-Installer via WiX (overrides.wxi) erstellt.
+                // Wir erstellen die .reg Datei trotzdem noch als Backup/Referenz für den Benutzer.
+                val regFile = file("out/T2demo.reg")
+                println("Erstelle Registry-Datei als Referenz: ${regFile.absolutePath}")
+                val regContent = """
+                    Windows Registry Editor Version 5.00
+
+                    [HKEY_CLASSES_ROOT\T2demo]
+                    @="URL:T2demo Protocol"
+                    "URL Protocol"=""
+
+                    [HKEY_CLASSES_ROOT\T2demo\shell]
+
+                    [HKEY_CLASSES_ROOT\T2demo\shell\open]
+
+                    [HKEY_CLASSES_ROOT\T2demo\shell\open\command]
+                    @="\"C:\\Program Files\\T2demoApp\\T2demoApp.exe\" \"%1\""
+                """.trimIndent().replace("\n", "\r\n") // Windows nutzt CRLF
+                regFile.writeText(regContent)
+            } else if (os.isLinux) {
+                val desktopFile = file("out/t2demo.desktop")
+                println("Erstelle Desktop-Datei: ${desktopFile.absolutePath}")
+                val desktopContent = """
+                    [Desktop Entry]
+                    Name=T2demo App
+                    Exec=/usr/bin/${appName.lowercase()} %u
+                    Type=Application
+                    Terminal=false
+                    MimeType=x-scheme-handler/T2demo;
+                """.trimIndent()
+                desktopFile.writeText(desktopContent)
             }
         }
     }
@@ -229,7 +247,11 @@ tasks.register<Exec>("installApp") {
             val msiFile = file("out").listFiles()?.find { it.name.endsWith(".msi") }
             if (msiFile != null) {
                 println("Starte Installation von ${msiFile.absolutePath}...")
-                commandLine("msiexec", "/i", msiFile.absolutePath)
+                // Installation ausführen
+                exec {
+                    commandLine("msiexec", "/i", msiFile.absolutePath, "/qn")
+                }
+                println("Installation abgeschlossen. Registry-Einträge wurden automatisch vom Installer gesetzt.")
             } else {
                 throw GradleException("MSI-Datei in out/ nicht gefunden. Wurde packageApp erfolgreich ausgeführt?")
             }
@@ -238,9 +260,27 @@ tasks.register<Exec>("installApp") {
         // Linux
         doFirst {
             val debFile = file("out").listFiles()?.find { it.name.endsWith(".deb") }
+            val desktopFile = file("out/t2demo.desktop")
             if (debFile != null) {
                 println("Installiere Debian-Paket ${debFile.absolutePath}...")
-                commandLine("sudo", "dpkg", "-i", debFile.absolutePath)
+                exec {
+                    commandLine("sudo", "dpkg", "-i", debFile.absolutePath)
+                }
+                // Desktop-Datei registrieren
+                if (desktopFile.exists()) {
+                    println("Registriere URL-Handler unter Linux...")
+                    val userDesktopDir = file("${System.getProperty("user.home")}/.local/share/applications")
+                    userDesktopDir.mkdirs()
+                    val targetDesktopFile = file("${userDesktopDir.absolutePath}/t2demo.desktop")
+                    desktopFile.copyTo(targetDesktopFile, overwrite = true)
+
+                    exec {
+                        commandLine("update-desktop-database", userDesktopDir.absolutePath)
+                    }
+                    exec {
+                        commandLine("xdg-settings", "set", "default-url-scheme-handler", "T2demo", "t2demo.desktop")
+                    }
+                }
             } else {
                 throw GradleException("Debian-Paket in out/ nicht gefunden. Wurde packageApp erfolgreich ausgeführt?")
             }
