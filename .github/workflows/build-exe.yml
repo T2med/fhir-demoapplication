@@ -20,12 +20,24 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Install WiX 3.11
-        run: choco install wixtoolset --version=3.11.2 -y --force
+      - name: Remove existing WiX versions
+        run: |
+          Remove-Item "C:\Program Files (x86)\WiX Toolset v3.14" -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item "C:\Program Files\WiX Toolset v3.14" -Recurse -Force -ErrorAction SilentlyContinue
         shell: pwsh
 
-      - name: Add WiX 3.11 to PATH
-        run: echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" >> $env:GITHUB_PATH
+      - name: Install WiX 3.11 (full)
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3112rtm/wix311-binaries.zip" -OutFile wix.zip
+          New-Item -ItemType Directory -Path "C:\Program Files (x86)\WiX Toolset v3.11\bin" -Force
+          Expand-Archive wix.zip -DestinationPath "C:\Program Files (x86)\WiX Toolset v3.11\bin" -Force
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" >> $env:GITHUB_PATH
+        shell: pwsh
+
+      - name: Verify WiX
+        run: |
+          Get-ChildItem "C:\Program Files (x86)\WiX Toolset v3.11\bin"
+          candle.exe -?
         shell: pwsh
 
       - name: Build MSI
