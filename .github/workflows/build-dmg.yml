@@ -25,18 +25,12 @@ jobs:
       - name: macOS-Paket bauen
         run: ./gradlew packageApp
 
-      - name: Ausgabe-Verzeichnis anzeigen
-        run: |
-          echo "=== out/ Inhalt ==="
-          find out -type f
-          echo "=== out/ rekursiv ==="
-          ls -laR out/
+      - name: App als ZIP packen und hochladen
+        run: zip -r out/T2demoApp.zip out/T2demoApp.app
 
-      - name: Paket als Artefakt hochladen
+      - name: Artefakt hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: macos-package
-          path: |
-            out/*.dmg
-            out/*.pkg
+          name: macos-app
+          path: out/T2demoApp.zip
           retention-days: 30
