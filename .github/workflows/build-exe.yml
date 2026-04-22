@@ -20,17 +20,46 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      # WiX 3.x installieren (NICHT 4.x oder 5.x!)
-      - name: Install WiX Toolset 3.11
+      - name: Find and add WiX to PATH
         run: |
-          choco install wixtoolset --version=3.11.2 -y
-          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | `
-            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          # Suche WiX-Installation
+          $wixPaths = @(
+            "C:\Program Files (x86)\WiX Toolset v3.14\bin",
+            "C:\Program Files (x86)\WiX Toolset v3.11\bin",
+            "C:\Program Files\WiX Toolset v3.14\bin",
+            "C:\Program Files\WiX Toolset v3.11\bin"
+          )
+          
+          $foundPath = $null
+          foreach ($path in $wixPaths) {
+            if (Test-Path "$path\candle.exe") {
+              $foundPath = $path
+              break
+            }
+          }
+          
+          # Fallback: Dynamische Suche
+          if (-not $foundPath) {
+            $candle = Get-ChildItem -Path "C:\Program Files (x86)", "C:\Program Files" `
+              -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | 
+              Select-Object -First 1
+            if ($candle) {
+              $foundPath = $candle.DirectoryName
+            }
+          }
+          
+          if ($foundPath) {
+            Write-Host "WiX gefunden unter: $foundPath"
+            echo "$foundPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          } else {
+            Write-Error "WiX Toolset nicht gefunden!"
+            exit 1
+          }
         shell: pwsh
 
-      - name: Verify WiX in PATH
-        run: where candle.exe
-        shell: cmd
+      - name: Verify WiX
+        run: candle.exe -?
+        shell: pwsh
 
       - name: Build MSI
         run: ./gradlew packageApp
