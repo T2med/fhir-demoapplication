@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+    <?ifdef JpIsSystemWide ?>
+        <?define JpInstallScope="perMachine" ?>
+    <?else ?>
+        <?define JpInstallScope="perUser" ?>
+    <?endif ?>
+
+    <Product Id="$(var.JpProductCode)" Name="$(var.JpAppName)"
+             Language="!(loc.LCID)" Version="$(var.JpAppVersion)"
+             Manufacturer="$(var.JpAppVendor)"
+             UpgradeCode="$(var.JpProductUpgradeCode)">
+
+        <Package Description="$(var.JpAppDescription)"
+                 Manufacturer="$(var.JpAppVendor)"
+                 InstallerVersion="200" Compressed="yes"
+                 InstallScope="$(var.JpInstallScope)" Platform="x64" />
+
+        <Media Id="1" Cabinet="Data.cab" EmbedCab="yes" />
+
+        <MajorUpgrade AllowDowngrades="yes" />
+
+        <Icon Id="AdapterIcon.exe" SourceFile="$(var.JpIcon)" />
+        <Property Id="ARPPRODUCTICON" Value="AdapterIcon.exe" />
+
+        <Directory Id="TARGETDIR" Name="SourceDir">
+            <Directory Id="ProgramFiles64Folder">
+                <Directory Id="INSTALLDIR" Name="$(var.JpAppName)" />
+            </Directory>
+            <Directory Id="ProgramMenuFolder">
+                <Directory Id="ApplicationProgramsFolder" Name="$(var.JpAppName)" />
+            </Directory>
+        </Directory>
+
+        <Feature Id="DefaultFeature" Title="!(loc.MainFeatureTitle)" Level="1">
+            <ComponentGroupRef Id="Files" />
+            <ComponentRef Id="T2demoProtocolHandler" />
+            <ComponentRef Id="MainAppShortcut" />
+        </Feature>
+
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="T2demoProtocolHandler" Guid="{73926715-BF2C-4012-9A6E-2F4E2C461306}" Win64="yes">
+                <RegistryKey Root="HKCR" Key="T2demo">
+                    <RegistryValue Type="string" Value="URL:T2demo Protocol" KeyPath="yes" />
+                    <RegistryValue Name="URL Protocol" Type="string" Value="" />
+                    <RegistryKey Key="shell\open\command">
+                        <RegistryValue Type="string" Value="&quot;[INSTALLDIR]$(var.JpAppName).exe&quot; &quot;%1&quot;" />
+                    </RegistryKey>
+                </RegistryKey>
+            </Component>
+        </DirectoryRef>
+
+        <DirectoryRef Id="ApplicationProgramsFolder">
+            <Component Id="MainAppShortcut" Guid="*">
+                <Shortcut Id="AppShortcut" Name="$(var.JpAppName)" Description="$(var.JpAppDescription)"
+                          Target="[INSTALLDIR]$(var.JpAppName).exe" WorkingDirectory="INSTALLDIR" Icon="AdapterIcon.exe" />
+                <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+                <RegistryValue Root="HKCU" Key="Software\$(var.JpAppVendor)\$(var.JpAppName)" Name="shortcut" Type="integer" Value="1" KeyPath="yes" />
+            </Component>
+        </DirectoryRef>
+
+    </Product>
+</Wix>

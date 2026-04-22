@@ -224,7 +224,7 @@ tasks.register<Exec>("packageApp") {
                 }
             }
         } else if (os.isWindows) {
-            // Die Registry-Einträge werden nun direkt im MSI-Installer via WiX (overrides.wxi) erstellt.
+            // Die Registry-Einträge werden nun direkt im MSI-Installer erstellt.
             // Wir erstellen die .reg Datei trotzdem noch als Backup/Referenz für den Benutzer.
             val regFile = file("out/T2demo.reg")
             println("Erstelle Registry-Datei als Referenz: ${regFile.absolutePath}")
