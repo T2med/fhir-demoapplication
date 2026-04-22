@@ -6,12 +6,9 @@
                 <RegistryValue Type="string" Value="URL:T2demo Protocol" KeyPath="yes" />
                 <RegistryValue Name="URL Protocol" Type="string" Value="" />
                 <RegistryKey Key="shell\open\command">
-                    <RegistryValue Type="string" Value="&quot;[#T2demoApp.exe]&quot; &quot;%1&quot;" />
+                    <RegistryValue Type="string" Value="&quot;[#$(var.JpAppName).exe]&quot; &quot;%1&quot;" />
                 </RegistryKey>
             </RegistryKey>
         </Component>
     </DirectoryRef>
-    <Feature Id="DefaultFeature">
-        <ComponentRef Id="T2demoProtocolHandler" />
-    </Feature>
 </Include>
