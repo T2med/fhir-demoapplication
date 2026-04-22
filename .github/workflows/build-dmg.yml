@@ -9,7 +9,9 @@ on:
 jobs:
   build:
     runs-on: macos-latest        # ← macOS-Runner
-
+    env:
+        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
+        
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v4
@@ -22,6 +24,9 @@ jobs:
 
       - name: macOS-Paket bauen
         run: ./gradlew packageApp
+
+      - name: Ausgabe-Verzeichnis anzeigen
+        run: find . -name "*.dmg" -o -name "*.pkg" | head -20
 
       - name: Paket als Artefakt hochladen
         uses: actions/upload-artifact@v4
