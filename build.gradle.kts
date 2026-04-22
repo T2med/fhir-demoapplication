@@ -41,9 +41,6 @@ tasks.test {
     systemProperty("javax.net.ssl.trustAll", "true")
     systemProperty("com.sun.net.ssl.checkRevocation", "false")
     systemProperty("sun.security.ssl.allowUnsafeRenegotiation", "true")
-
-    // Verbose SSL Debug
-    // systemProperty("javax.net.debug", "ssl,handshake")
 }
 
 application {
@@ -196,39 +193,39 @@ tasks.register<Exec>("packageApp") {
                         tempFile.delete()
                     }
                 }
-            } else if (os.isWindows) {
-                // Die Registry-Einträge werden nun direkt im MSI-Installer via WiX (overrides.wxi) erstellt.
-                // Wir erstellen die .reg Datei trotzdem noch als Backup/Referenz für den Benutzer.
-                val regFile = file("out/T2demo.reg")
-                println("Erstelle Registry-Datei als Referenz: ${regFile.absolutePath}")
-                val regContent = """
-                    Windows Registry Editor Version 5.00
-
-                    [HKEY_CLASSES_ROOT\T2demo]
-                    @="URL:T2demo Protocol"
-                    "URL Protocol"=""
-
-                    [HKEY_CLASSES_ROOT\T2demo\shell]
-
-                    [HKEY_CLASSES_ROOT\T2demo\shell\open]
-
-                    [HKEY_CLASSES_ROOT\T2demo\shell\open\command]
-                    @="\"C:\\Program Files\\T2demoApp\\T2demoApp.exe\" \"%1\""
-                """.trimIndent().replace("\n", "\r\n") // Windows nutzt CRLF
-                regFile.writeText(regContent)
-            } else if (os.isLinux) {
-                val desktopFile = file("out/t2demo.desktop")
-                println("Erstelle Desktop-Datei: ${desktopFile.absolutePath}")
-                val desktopContent = """
-                    [Desktop Entry]
-                    Name=T2demo App
-                    Exec=/usr/bin/${appName.lowercase()} %u
-                    Type=Application
-                    Terminal=false
-                    MimeType=x-scheme-handler/T2demo;
-                """.trimIndent()
-                desktopFile.writeText(desktopContent)
             }
+        } else if (os.isWindows) {
+            // Die Registry-Einträge werden nun direkt im MSI-Installer via WiX (overrides.wxi) erstellt.
+            // Wir erstellen die .reg Datei trotzdem noch als Backup/Referenz für den Benutzer.
+            val regFile = file("out/T2demo.reg")
+            println("Erstelle Registry-Datei als Referenz: ${regFile.absolutePath}")
+            val regContent = """
+                Windows Registry Editor Version 5.00
+
+                [HKEY_CLASSES_ROOT\T2demo]
+                @="URL:T2demo Protocol"
+                "URL Protocol"=""
+
+                [HKEY_CLASSES_ROOT\T2demo\shell]
+
+                [HKEY_CLASSES_ROOT\T2demo\shell\open]
+
+                [HKEY_CLASSES_ROOT\T2demo\shell\open\command]
+                @="\"C:\\Program Files\\T2demoApp\\T2demoApp.exe\" \"%1\""
+            """.trimIndent().replace("\n", "\r\n") // Windows nutzt CRLF
+            regFile.writeText(regContent)
+        } else if (os.isLinux) {
+            val desktopFile = file("out/t2demo.desktop")
+            println("Erstelle Desktop-Datei: ${desktopFile.absolutePath}")
+            val desktopContent = """
+                [Desktop Entry]
+                Name=T2demo App
+                Exec=/usr/bin/${appName.lowercase()} %u
+                Type=Application
+                Terminal=false
+                MimeType=x-scheme-handler/T2demo;
+            """.trimIndent()
+            desktopFile.writeText(desktopContent)
         }
     }
 }

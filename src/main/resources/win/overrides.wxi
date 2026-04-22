@@ -1,14 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Include>
-    <DirectoryRef Id="INSTALLDIR">
-        <Component Id="T2demoProtocolHandler" Guid="{73926715-BF2C-4012-9A6E-2F4E2C461306}" Win64="yes">
-            <RegistryKey Root="HKCR" Key="T2demo">
-                <RegistryValue Type="string" Value="URL:T2demo Protocol" KeyPath="yes" />
-                <RegistryValue Name="URL Protocol" Type="string" Value="" />
-                <RegistryKey Key="shell\open\command">
-                    <RegistryValue Type="string" Value="&quot;[#$(var.JpAppName).exe]&quot; &quot;%1&quot;" />
+    <Fragment>
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="T2demoProtocolHandler" Guid="{73926715-BF2C-4012-9A6E-2F4E2C461306}" Win64="yes">
+                <RegistryKey Root="HKCR" Key="T2demo">
+                    <RegistryValue Type="string" Value="URL:T2demo Protocol" KeyPath="yes" />
+                    <RegistryValue Name="URL Protocol" Type="string" Value="" />
+                    <RegistryKey Key="shell\open\command">
+                        <RegistryValue Type="string" Value="&quot;[INSTALLDIR]$(var.JpAppName).exe&quot; &quot;%1&quot;" />
+                    </RegistryKey>
                 </RegistryKey>
-            </RegistryKey>
-        </Component>
-    </DirectoryRef>
+            </Component>
+        </DirectoryRef>
+        <FeatureRef Id="DefaultFeature">
+            <ComponentRef Id="T2demoProtocolHandler" />
+        </FeatureRef>
+    </Fragment>
 </Include>
