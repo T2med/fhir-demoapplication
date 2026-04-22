@@ -77,10 +77,12 @@ tasks.register<Exec>("packageApp") {
         if (OperatingSystem.current().isWindows) {
             // WiX-Pfad dynamisch finden und zur JVM-Umgebung hinzufügen
             val wixLocations = listOf(
-                "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
                 "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
+                "C:\\Program Files\\WiX Toolset v3.11\\bin",
+                "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
                 "C:\\Program Files\\WiX Toolset v3.14\\bin"
             )
+
 
             val wixPath = wixLocations.firstOrNull {
                 File("$it\\candle.exe").exists()
