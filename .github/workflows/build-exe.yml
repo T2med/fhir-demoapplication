@@ -1,35 +1,43 @@
-# .github/workflows/build-exe.yml
-name: Build Windows Package
+name: Build MSI Installer
 
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  build:
-    runs-on: windows-latest        # ← das ist der einzige wesentliche Unterschied
-    env:
-        FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true 
+  build-windows:
+    runs-on: windows-latest
 
     steps:
-      - name: Repository auschecken
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: JDK 21 einrichten
+      - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Windows-Paket bauen
-        run: ./gradlew packageApp
+      # WiX 3.x installieren (NICHT 4.x oder 5.x!)
+      - name: Install WiX Toolset 3.11
+        run: |
+          choco install wixtoolset --version=3.11.2 -y
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | `
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+        shell: pwsh
 
-      - name: Paket als Artefakt hochladen
+      - name: Verify WiX in PATH
+        run: where candle.exe
+        shell: cmd
+
+      - name: Build MSI
+        run: ./gradlew packageApp
+        shell: cmd
+
+      - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows-package
-          path: |
-            out/*.exe
-            out/*.msi
-          retention-days: 30
+          name: windows-installer
+          path: out/*.msi

@@ -74,19 +74,29 @@ tasks.register<Exec>("packageApp") {
     val os = OperatingSystem.current()
 
     doFirst {
+        // WiX-Verfügbarkeit prüfen (nur Windows)
+        if (os.isWindows) {
+            val candle = ProcessBuilder("where", "candle.exe")
+                .start()
+                .waitFor()
+            require(candle == 0) {
+                """
+                candle.exe nicht gefunden! WiX Toolset 3.x muss installiert sein.
+                Installation: choco install wixtoolset --version=3.11.2
+                Danach PATH aktualisieren: C:\Program Files (x86)\WiX Toolset v3.11\bin
+                """.trimIndent()
+            }
+        }
+
         val outDir = file("out")
         if (os.isMacOsX) {
-            val appBundle = file("out/$appName.app")
-            if (appBundle.exists()) {
-                println("Lösche altes App-Image: $appBundle")
-                appBundle.deleteRecursively()
-            }
+            file("out/$appName.app").takeIf { it.exists() }?.deleteRecursively()
         } else if (outDir.exists()) {
-            println("Lösche alten Output-Ordner: $outDir")
             outDir.deleteRecursively()
         }
         outDir.mkdirs()
     }
+
 
     if (os.isMacOsX) {
         commandLine(
