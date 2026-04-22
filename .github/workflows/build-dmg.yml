@@ -26,7 +26,13 @@ jobs:
         run: ./gradlew packageApp
 
       - name: Ausgabe-Verzeichnis anzeigen
-        run: find . -name "*.dmg" -o -name "*.pkg" | head -20
+        run: |
+          echo "=== Projektverzeichnis ==="
+          ls -la
+          echo "=== build/ ==="
+          find build -name "*.dmg" -o -name "*.pkg" 2>/dev/null
+          echo "=== Alles ==="
+          find . -maxdepth 4 -name "*.dmg" -o -name "*.pkg" 2>/dev/null
 
       - name: Paket als Artefakt hochladen
         uses: actions/upload-artifact@v4
