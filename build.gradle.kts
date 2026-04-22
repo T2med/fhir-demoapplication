@@ -74,18 +74,32 @@ tasks.register<Exec>("packageApp") {
     val os = OperatingSystem.current()
 
     doFirst {
-        // WiX-Verfügbarkeit prüfen (nur Windows)
-        if (os.isWindows) {
-            val candle = ProcessBuilder("where", "candle.exe")
-                .start()
-                .waitFor()
-            require(candle == 0) {
-                """
-                candle.exe nicht gefunden! WiX Toolset 3.x muss installiert sein.
-                Installation: choco install wixtoolset --version=3.11.2
-                Danach PATH aktualisieren: C:\Program Files (x86)\WiX Toolset v3.11\bin
-                """.trimIndent()
+        if (OperatingSystem.current().isWindows) {
+            // WiX-Pfad dynamisch finden und zur JVM-Umgebung hinzufügen
+            val wixLocations = listOf(
+                "C:\\Program Files (x86)\\WiX Toolset v3.14\\bin",
+                "C:\\Program Files (x86)\\WiX Toolset v3.11\\bin",
+                "C:\\Program Files\\WiX Toolset v3.14\\bin"
+            )
+
+            val wixPath = wixLocations.firstOrNull {
+                File("$it\\candle.exe").exists()
+            } ?: run {
+                // Fallback: Suche im Dateisystem
+                sequenceOf(
+                    File("C:\\Program Files (x86)"),
+                    File("C:\\Program Files")
+                ).flatMap { it.walk() }
+                    .firstOrNull { it.name == "candle.exe" }
+                    ?.parent
+                    ?: throw GradleException("WiX Toolset nicht gefunden!")
             }
+
+            println("Verwende WiX aus: $wixPath")
+
+            // PATH für diesen Prozess und child-Prozesse setzen
+            val currentPath = System.getenv("PATH") ?: ""
+            environment("PATH", "$wixPath;$currentPath")
         }
 
         val outDir = file("out")

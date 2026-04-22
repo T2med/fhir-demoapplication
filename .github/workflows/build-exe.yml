@@ -20,50 +20,55 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Find and add WiX to PATH
+      - name: Find and add WiX to PATH (System-wide)
         run: |
-          # Suche WiX-Installation
-          $wixPaths = @(
-            "C:\Program Files (x86)\WiX Toolset v3.14\bin",
-            "C:\Program Files (x86)\WiX Toolset v3.11\bin",
-            "C:\Program Files\WiX Toolset v3.14\bin",
-            "C:\Program Files\WiX Toolset v3.11\bin"
-          )
+          # Dynamische Suche nach candle.exe
+          $candle = Get-ChildItem -Path "C:\Program Files (x86)", "C:\Program Files" `
+            -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | 
+            Select-Object -First 1
           
-          $foundPath = $null
-          foreach ($path in $wixPaths) {
-            if (Test-Path "$path\candle.exe") {
-              $foundPath = $path
-              break
-            }
-          }
-          
-          # Fallback: Dynamische Suche
-          if (-not $foundPath) {
-            $candle = Get-ChildItem -Path "C:\Program Files (x86)", "C:\Program Files" `
-              -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | 
-              Select-Object -First 1
-            if ($candle) {
-              $foundPath = $candle.DirectoryName
-            }
-          }
-          
-          if ($foundPath) {
-            Write-Host "WiX gefunden unter: $foundPath"
-            echo "$foundPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          } else {
-            Write-Error "WiX Toolset nicht gefunden!"
+          if (-not $candle) {
+            Write-Error "candle.exe nicht gefunden!"
             exit 1
           }
+          
+          $wixPath = $candle.DirectoryName
+          Write-Host "WiX Pfad: $wixPath"
+          
+          # Auf ALLEN Ebenen setzen damit child-Prozesse es erben
+          # 1. GitHub Actions PATH
+          echo "$wixPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # 2. Aktueller Prozess
+          $env:PATH = "$wixPath;$env:PATH"
+          
+          # 3. System-Ebene (für child-Prozesse wie jpackage)
+          $currentSystemPath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
+          if ($currentSystemPath -notlike "*$wixPath*") {
+            [System.Environment]::SetEnvironmentVariable(
+              "PATH", 
+              "$wixPath;$currentSystemPath", 
+              "Machine"
+            )
+            Write-Host "System-PATH aktualisiert"
+          }
+          
+          # Verifikation
+          Write-Host "candle.exe erreichbar: $(Test-Path "$wixPath\candle.exe")"
         shell: pwsh
 
-      - name: Verify WiX
-        run: candle.exe -?
+      - name: Verify WiX accessible
+        run: |
+          candle.exe -?
+          Write-Host "WiX OK"
         shell: pwsh
 
       - name: Build MSI
         run: ./gradlew packageApp
         shell: cmd
+        env:
+          # PATH explizit übergeben
+          PATH: ${{ env.PATH }}
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
