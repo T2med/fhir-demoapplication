@@ -20,24 +20,17 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Find WiX Path
-        id: wix
-        run: |
-          $candle = Get-ChildItem -Path "C:\Program Files (x86)", "C:\Program Files" `
-            -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | 
-            Select-Object -First 1
-          $wixDir = $candle.DirectoryName
-          $wixRoot = Split-Path $wixDir -Parent
-          echo "wix_bin=$wixDir" >> $env:GITHUB_OUTPUT
-          echo "wix_root=$wixRoot" >> $env:GITHUB_OUTPUT
+      - name: Install WiX 3.11
+        run: choco install wixtoolset --version=3.11.2 -y --force
+        shell: pwsh
+
+      - name: Add WiX 3.11 to PATH
+        run: echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" >> $env:GITHUB_PATH
         shell: pwsh
 
       - name: Build MSI
         run: ./gradlew packageApp
         shell: cmd
-        env:
-          PATH: ${{ steps.wix.outputs.wix_bin }};${{ env.PATH }}
-          WIX: ${{ steps.wix.outputs.wix_root }}\
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
