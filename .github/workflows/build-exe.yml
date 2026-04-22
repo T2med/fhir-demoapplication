@@ -1,0 +1,31 @@
+# .github/workflows/build-exe.yml
+name: Build Windows Package
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest        # ← das ist der einzige wesentliche Unterschied
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: JDK 21 einrichten
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Windows-Paket bauen
+        run: ./gradlew packageApp
+
+      - name: Paket als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: out/*.exe        # oder *.msi, je nachdem was jpackage erzeugt
+          retention-days: 30
