@@ -27,5 +27,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-package
-          path: out/*.exe        # oder *.msi, je nachdem was jpackage erzeugt
+          path: |
+            out/*.exe
+            out/*.msi
           retention-days: 30
