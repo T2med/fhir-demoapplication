@@ -1,0 +1,33 @@
+# .github/workflows/build-dmg.yml
+name: Build macOS Package
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest        # ← macOS-Runner
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: JDK 21 einrichten
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: macOS-Paket bauen
+        run: ./gradlew packageApp
+
+      - name: Paket als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package
+          path: |
+            out/*.dmg
+            out/*.pkg
+          retention-days: 30
