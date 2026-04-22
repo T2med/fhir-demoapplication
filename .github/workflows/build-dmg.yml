@@ -27,12 +27,10 @@ jobs:
 
       - name: Ausgabe-Verzeichnis anzeigen
         run: |
-          echo "=== Projektverzeichnis ==="
-          ls -la
-          echo "=== build/ ==="
-          find build -name "*.dmg" -o -name "*.pkg" 2>/dev/null
-          echo "=== Alles ==="
-          find . -maxdepth 4 -name "*.dmg" -o -name "*.pkg" 2>/dev/null
+          echo "=== out/ Inhalt ==="
+          find out -type f
+          echo "=== out/ rekursiv ==="
+          ls -laR out/
 
       - name: Paket als Artefakt hochladen
         uses: actions/upload-artifact@v4
