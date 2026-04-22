@@ -20,55 +20,24 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: Find and add WiX to PATH (System-wide)
+      - name: Find WiX Path
+        id: wix
         run: |
-          # Dynamische Suche nach candle.exe
           $candle = Get-ChildItem -Path "C:\Program Files (x86)", "C:\Program Files" `
             -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | 
             Select-Object -First 1
-          
-          if (-not $candle) {
-            Write-Error "candle.exe nicht gefunden!"
-            exit 1
-          }
-          
-          $wixPath = $candle.DirectoryName
-          Write-Host "WiX Pfad: $wixPath"
-          
-          # Auf ALLEN Ebenen setzen damit child-Prozesse es erben
-          # 1. GitHub Actions PATH
-          echo "$wixPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          
-          # 2. Aktueller Prozess
-          $env:PATH = "$wixPath;$env:PATH"
-          
-          # 3. System-Ebene (für child-Prozesse wie jpackage)
-          $currentSystemPath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
-          if ($currentSystemPath -notlike "*$wixPath*") {
-            [System.Environment]::SetEnvironmentVariable(
-              "PATH", 
-              "$wixPath;$currentSystemPath", 
-              "Machine"
-            )
-            Write-Host "System-PATH aktualisiert"
-          }
-          
-          # Verifikation
-          Write-Host "candle.exe erreichbar: $(Test-Path "$wixPath\candle.exe")"
-        shell: pwsh
-
-      - name: Verify WiX accessible
-        run: |
-          candle.exe -?
-          Write-Host "WiX OK"
+          $wixDir = $candle.DirectoryName
+          $wixRoot = Split-Path $wixDir -Parent
+          echo "wix_bin=$wixDir" >> $env:GITHUB_OUTPUT
+          echo "wix_root=$wixRoot" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
       - name: Build MSI
         run: ./gradlew packageApp
         shell: cmd
         env:
-          # PATH explizit übergeben
-          PATH: ${{ env.PATH }}
+          PATH: ${{ steps.wix.outputs.wix_bin }};${{ env.PATH }}
+          WIX: ${{ steps.wix.outputs.wix_root }}\
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
