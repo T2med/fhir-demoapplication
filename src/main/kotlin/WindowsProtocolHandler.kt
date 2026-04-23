@@ -32,7 +32,7 @@ object WindowsProtocolHandler {
 
             // 3. Command-Eintrag für den Aufruf der App mit Parameter %1
             val commandPath = "$classesPath\\shell\\open\\command"
-            val commandValue = "\"$appPath\" \"%1\""
+            val commandValue = "\\\"$appPath\\\" \\\"%1\\\""
             runCommand("reg", "add", commandPath, "/ve", "/t", "REG_SZ", "/d", commandValue, "/f")
 
             logger.info("Windows Protocol Handler für $protocol registriert auf: $appPath")
