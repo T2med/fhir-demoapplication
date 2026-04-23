@@ -1,19 +1,20 @@
+import constants.AppConstants
+import constants.FhirConstants
+import org.hl7.fhir.r4.model.*
+import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
-import java.awt.Component
 import java.awt.Font
 import java.net.URI
 import java.net.URLDecoder
+import java.util.*
+import java.util.concurrent.Executors
 import javax.swing.*
 import javax.swing.table.DefaultTableModel
-import org.hl7.fhir.r4.model.*
-import ca.uhn.fhir.context.FhirContext
-import org.slf4j.LoggerFactory
-import java.util.Date
-import java.util.concurrent.Executors
-import constants.AppConstants
-import constants.FhirConstants
 
 fun main(args: Array<String>) {
+    // Windows-Protokoll-Registrierung (im User-Kontext HKCU)
+    WindowsProtocolHandler.registerIfNecessary()
+
     SwingUtilities.invokeLater {
         val app = DemoApp()
         app.isVisible = true
@@ -274,7 +275,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
 
     private fun createDetailRow(label: String, valueLabel: JLabel): JPanel {
         val panel = JPanel(BorderLayout(5, 5))
-        panel.alignmentX = Component.LEFT_ALIGNMENT
+        panel.alignmentX = LEFT_ALIGNMENT
         val l = JLabel(label)
         l.font = l.font.deriveFont(Font.BOLD)
         panel.add(l, BorderLayout.WEST)

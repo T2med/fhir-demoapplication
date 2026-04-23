@@ -137,8 +137,7 @@ tasks.register<Exec>("packageApp") {
             "--main-class", mainClass,
             "--type", "msi",
             "--win-shortcut",
-            "--win-menu",
-            "--resource-dir", "src/main/resources/win"
+            "--win-menu"
         )
     } else {
         // Linux
@@ -224,22 +223,23 @@ tasks.register<Exec>("packageApp") {
                 }
             }
         } else if (os.isWindows) {
-            // Die Registry-Einträge werden nun direkt im MSI-Installer erstellt.
+            // Die Registry-Einträge werden nun direkt von der App beim Start erstellt (WindowsProtocolHandler),
+            // da WiX-Anpassungen unter JDK 21 instabil sind.
             // Wir erstellen die .reg Datei trotzdem noch als Backup/Referenz für den Benutzer.
             val regFile = file("out/T2demo.reg")
             println("Erstelle Registry-Datei als Referenz: ${regFile.absolutePath}")
             val regContent = """
                 Windows Registry Editor Version 5.00
 
-                [HKEY_CLASSES_ROOT\T2demo]
+                [HKEY_CURRENT_USER\Software\Classes\T2demo]
                 @="URL:T2demo Protocol"
                 "URL Protocol"=""
 
-                [HKEY_CLASSES_ROOT\T2demo\shell]
+                [HKEY_CURRENT_USER\Software\Classes\T2demo\shell]
 
-                [HKEY_CLASSES_ROOT\T2demo\shell\open]
+                [HKEY_CURRENT_USER\Software\Classes\T2demo\shell\open]
 
-                [HKEY_CLASSES_ROOT\T2demo\shell\open\command]
+                [HKEY_CURRENT_USER\Software\Classes\T2demo\shell\open\command]
                 @="\"C:\\Program Files\\T2demoApp\\T2demoApp.exe\" \"%1\""
             """.trimIndent().replace("\n", "\r\n") // Windows nutzt CRLF
             regFile.writeText(regContent)
@@ -277,7 +277,7 @@ tasks.register<Exec>("installApp") {
                 exec {
                     commandLine("msiexec", "/i", msiFile.absolutePath, "/qn")
                 }
-                println("Installation abgeschlossen. Registry-Einträge wurden automatisch vom Installer gesetzt.")
+                println("Installation abgeschlossen. Registry-Einträge werden beim ersten App-Start (WindowsProtocolHandler) gesetzt.")
             } else {
                 throw GradleException("MSI-Datei in out/ nicht gefunden. Wurde packageApp erfolgreich ausgeführt?")
             }
