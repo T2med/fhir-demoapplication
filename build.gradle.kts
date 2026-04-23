@@ -148,9 +148,7 @@ tasks.register<Exec>("packageApp") {
             "--name", appName.lowercase(),
             "--main-jar", mainJar,
             "--main-class", mainClass,
-            "--type", "deb",
-            "--linux-shortcut",
-            "--linux-menu"
+            "--type", "deb"
         )
     }
 
