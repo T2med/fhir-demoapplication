@@ -16,6 +16,8 @@ object FhirConstants {
     const val PROFILE_PROCEDURE_THERAPIE = "https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie|1.0.0"
     const val PROFILE_PROCEDURE_PROCEDERE = "https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere|1.0.0"
     const val PROFILE_DOCUMENT_REFERENCE_FREITEXT = "https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceFreitext|1.0.0"
+    const val PROFILE_DOCUMENT_REFERENCE_ANHANG = "https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceAnhang|1.0.0"
+    const val EXTENSION_ANHANG_KUERZEL = "https://fhir.t2med.de/StructureDefinition/FhirApiAnhangKuerzel"
     
     // HTTP Headers
     const val HEADER_X_FHIR_PROFILE = "X-FHIR-Profile"
