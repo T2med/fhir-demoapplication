@@ -247,11 +247,17 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
         val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
 
-        val chooser = JFileChooser()
-        chooser.dialogTitle = "Dokument auswählen"
-        chooser.fileFilter = javax.swing.filechooser.FileNameExtensionFilter("Alle Dateien", "*")
-        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return
-        val file = chooser.selectedFile
+        val file = if (System.getProperty("os.name").lowercase().contains("mac")) {
+            val dialog = java.awt.FileDialog(this, "Dokument auswählen", java.awt.FileDialog.LOAD)
+            dialog.isVisible = true
+            if (dialog.file == null) return
+            java.io.File(dialog.directory, dialog.file)
+        } else {
+            val chooser = JFileChooser()
+            chooser.dialogTitle = "Dokument auswählen"
+            if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return
+            chooser.selectedFile
+        }
 
         executor.execute {
             try {
