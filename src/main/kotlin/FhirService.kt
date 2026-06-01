@@ -278,6 +278,39 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
+    fun createDocumentReferenceAnhang(kontextId: String, file: java.io.File, kuerzel: String = "Dokument"): OperationOutcome {
+        try {
+            val doc = DocumentReference()
+            setProfile(doc, FhirConstants.PROFILE_DOCUMENT_REFERENCE_ANHANG)
+            addKontextIdentifier(doc, kontextId)
+
+            doc.status = Enumerations.DocumentReferenceStatus.CURRENT
+            doc.date = Date()
+            doc.description = file.name
+
+            val kuerzelExt = org.hl7.fhir.r4.model.Extension()
+            kuerzelExt.url = FhirConstants.EXTENSION_ANHANG_KUERZEL
+            kuerzelExt.setValue(StringType(kuerzel))
+            doc.addExtension(kuerzelExt)
+
+            val attachment = Attachment()
+            attachment.contentType = java.nio.file.Files.probeContentType(file.toPath()) ?: "application/octet-stream"
+            attachment.title = file.name
+            attachment.creation = Date()
+            attachment.data = file.readBytes()
+
+            doc.addContent().attachment = attachment
+
+            val result = client.create()
+                .resource(doc)
+                .execute()
+
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "createDocumentReferenceAnhang")
+        }
+    }
+
     fun sendTransactionBundle(kontextId: String, resources: List<Resource>): Bundle {
         try {
             val bundle = Bundle()

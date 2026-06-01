@@ -119,6 +119,10 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         btnCreateDoc.addActionListener { testCreateDocumentReference() }
         buttonPanel.add(btnCreateDoc)
 
+        val btnUploadDoc = JButton("Dokument hochladen")
+        btnUploadDoc.addActionListener { testUploadDocument() }
+        buttonPanel.add(btnUploadDoc)
+
         val btnTransaction = JButton("Transaktion (Obs+Cond)")
         btnTransaction.addActionListener { testTransaction() }
         buttonPanel.add(btnTransaction)
@@ -236,6 +240,36 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             } catch (e: Exception) {
                 SwingUtilities.invokeLater { log("Fehler bei DocumentReference-Erstellung: ${e.message}") }
                 logger.error("Fehler bei DocumentReference-Erstellung", e)
+            }
+        }
+    }
+
+    private fun testUploadDocument() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val file = if (System.getProperty("os.name").lowercase().contains("mac")) {
+            val dialog = java.awt.FileDialog(this, "Dokument auswählen", java.awt.FileDialog.LOAD)
+            dialog.isVisible = true
+            if (dialog.file == null) return
+            java.io.File(dialog.directory, dialog.file)
+        } else {
+            val chooser = JFileChooser()
+            chooser.dialogTitle = "Dokument auswählen"
+            if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return
+            chooser.selectedFile
+        }
+
+        executor.execute {
+            try {
+                log("Lade Dokument hoch: ${file.name} (${file.length()} Bytes)...")
+                val outcome = service.createDocumentReferenceAnhang(kontext, file)
+                SwingUtilities.invokeLater {
+                    log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}")
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler beim Dokument-Upload: ${e.message}") }
+                logger.error("Fehler beim Dokument-Upload", e)
             }
         }
     }
