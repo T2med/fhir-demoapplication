@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-04-08**
+Stand: **2026-06-02**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -194,7 +194,70 @@ Implementierungsnahe Besonderheiten:
 - `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` liefert Validierungsfehler, wenn `description`, `attachment.data` oder `attachment.contentType` fehlen.
 - Für `DocumentReference`-Anhänge werden zu langer Beschreibungstext und ein zu langes Kürzel als Warnungen behandelt.
 
-## 8. Verwendete Code-Systeme (insb. `Condition`)
+## 8. Kontaktdaten im Patient-Profil (Telefonnummer und Email)
+
+Ab Release 26.7 enthält die Patient-Ressource Kontaktdaten (Telefonnummern und E-Mail-Adressen) als FHIR `telecom`-Einträge.
+
+### 8.1 Telefonnummer
+
+| Feld | FHIR-Mapping | Mögliche Werte |
+| --- | --- | --- |
+| Nummer | `telecom.value` | beliebige Zeichenkette |
+| Typ | `telecom.system` | `phone` (Telefon), `fax` (Fax) |
+| Verwendung | `telecom.use` | `home`, `work`, `mobile` (nur bei `system=phone`) |
+| Kategorie | Extension `https://fhir.t2med.de/StructureDefinition/FhirApiTelefonnummerKategorie` | Code-Wert als `valueCode` |
+| Kommentar | Extension `https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar` | Freitext als `valueString` |
+
+Beispiel:
+
+```json
+{
+  "system": "phone",
+  "value": "089 123456",
+  "use": "home",
+  "extension": [
+    {
+      "url": "https://fhir.t2med.de/StructureDefinition/FhirApiTelefonnummerKategorie",
+      "valueCode": "privat"
+    },
+    {
+      "url": "https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar",
+      "valueString": "nur vormittags erreichbar"
+    }
+  ]
+}
+```
+
+### 8.2 E-Mail-Adresse
+
+| Feld | FHIR-Mapping | Mögliche Werte |
+| --- | --- | --- |
+| Adresse | `telecom.value` | E-Mail-Adresse |
+| Typ | `telecom.system` | immer `email` |
+| Verwendung | `telecom.use` | `home`, `work` |
+| Kommentar | Extension `https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar` | Freitext als `valueString` |
+
+Beispiel:
+
+```json
+{
+  "system": "email",
+  "value": "max.mustermann@example.de",
+  "use": "home",
+  "extension": [
+    {
+      "url": "https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar",
+      "valueString": "bevorzugte Kontaktmethode"
+    }
+  ]
+}
+```
+
+### 8.3 Verhalten bei leeren Kontaktdaten
+
+Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-Ressource kein `telecom`-Array.
+
+## 9. Verwendete Code-Systeme (insb. `Condition`)
 
 | Anwendungsfall | System-URL | Codes |
 | --- | --- | --- |
@@ -203,7 +266,7 @@ Implementierungsnahe Besonderheiten:
 | Seitenlokalisation | `https://fhir.kbv.de/CodeSystem/KBV_CS_SFHIR_ICD_SEITENLOKALISATION` | `L`, `R`, `B` |
 | Diagnose-Relevanz | `https://fhir.t2med.de/CodeSystem/FhirApiDiagnoseRelevanz` | `akut`, `dauerhaft`, `anamnestisch` |
 
-## 9. Sicherheits- und Betriebsaspekte
+## 10. Sicherheits- und Betriebsaspekte
 
 - API-Key nie im Klartext loggen.
 - TLS für alle FHIR-Aufrufe erzwingen.
@@ -216,7 +279,7 @@ Implementierungsnahe Besonderheiten:
 - Kontext-IDs als kurzlebige technische Tokens behandeln.
 - `X-TreatWarningAsError` bewusst setzen. Ohne Header ist das Verhalten identisch zu `true`.
 
-## 10. Go-Live-Checkliste
+## 11. Go-Live-Checkliste
 
 - [ ] Drittanbieter in APS aktiviert
 - [ ] API-Key vorhanden und sicher hinterlegt
@@ -231,7 +294,7 @@ Implementierungsnahe Besonderheiten:
 - [ ] Optional: Transaction-Verhalten mit Rollback geprüft
 - [ ] Monitoring für HTTP-Status und `OperationOutcome` vorhanden
 
-## 11. Schnellstart (Minimalfluss)
+## 12. Schnellstart (Minimalfluss)
 
 1. Kontext über APS bereitstellen oder übernehmen.
 2. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
@@ -282,6 +345,24 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
     {
       "system": "https://fhir.t2med.de/identifier/kontext",
       "value": "<KONTEXT_ID>"
+    }
+  ],
+  "telecom": [
+    {
+      "system": "phone",
+      "value": "089 123456",
+      "use": "home",
+      "extension": [
+        {
+          "url": "https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar",
+          "valueString": "nur vormittags"
+        }
+      ]
+    },
+    {
+      "system": "email",
+      "value": "max.mustermann@example.de",
+      "use": "home"
     }
   ]
 }
