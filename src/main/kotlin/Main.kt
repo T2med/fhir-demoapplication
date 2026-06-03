@@ -126,6 +126,30 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         val btnTransaction = JButton("Transaktion (Obs+Cond)")
         btnTransaction.addActionListener { testTransaction() }
         buttonPanel.add(btnTransaction)
+
+        val btnCreatePatient = JButton("Patient anlegen")
+        btnCreatePatient.addActionListener { testCreatePatient() }
+        buttonPanel.add(btnCreatePatient)
+
+        val btnUpdatePatient = JButton("Patient aktualisieren")
+        btnUpdatePatient.addActionListener { testUpdatePatient() }
+        buttonPanel.add(btnUpdatePatient)
+
+        val btnReadEncounter = JButton("Encounter lesen")
+        btnReadEncounter.addActionListener { testReadEncounter() }
+        buttonPanel.add(btnReadEncounter)
+
+        val btnSearchOrg = JButton("Organisation suchen")
+        btnSearchOrg.addActionListener { testSearchOrganization() }
+        buttonPanel.add(btnSearchOrg)
+
+        val btnSearchPract = JButton("Practitioner suchen")
+        btnSearchPract.addActionListener { testSearchPractitioner() }
+        buttonPanel.add(btnSearchPract)
+
+        val btnCreateBefund = JButton("Befund anlegen")
+        btnCreateBefund.addActionListener { testCreateBefund() }
+        buttonPanel.add(btnCreateBefund)
         
         apiTestPanel.add(buttonPanel)
         
@@ -303,6 +327,127 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             } catch (e: Exception) {
                 SwingUtilities.invokeLater { log("Fehler bei Transaktion: ${e.message}") }
                 logger.error("Fehler bei Transaktion", e)
+            }
+        }
+    }
+
+    private fun testCreatePatient() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Lege Patient (Max Mustermann, 1980-04-12) an...")
+                val outcome = service.createPatient(kontext)
+                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Patient-Erstellung: ${e.message}") }
+                logger.error("Fehler bei Patient-Erstellung", e)
+            }
+        }
+    }
+
+    private fun testUpdatePatient() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Suche Patient für Kontext $kontext (für Update)...")
+                val patient = service.searchPatientByKontext(kontext)
+                if (patient == null) {
+                    SwingUtilities.invokeLater { log("Kein Patient gefunden — Update nicht möglich.") }
+                    return@execute
+                }
+                val patientId = patient.idElement.idPart
+                val versionId = patient.meta?.versionId
+                log("Patient gefunden: ID=$patientId, Version=$versionId — aktualisiere Telefonnummer...")
+                val outcome = service.updatePatient(patientId, versionId)
+                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Patient-Update: ${e.message}") }
+                logger.error("Fehler bei Patient-Update", e)
+            }
+        }
+    }
+
+    private fun testReadEncounter() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Lese Encounter für Kontext-ID $kontext...")
+                val encounter = service.readEncounter(kontext)
+                SwingUtilities.invokeLater { log("Encounter gelesen: ID=${encounter.idElement.idPart}, Status=${encounter.status}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Encounter-Lesen: ${e.message}") }
+                logger.error("Fehler bei Encounter-Lesen", e)
+            }
+        }
+    }
+
+    private fun testSearchOrganization() {
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val name = JOptionPane.showInputDialog(this, "Organisationsname (leer = alle):", "Organisation suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+
+        executor.execute {
+            try {
+                log("Suche Organisation: \"$name\"...")
+                val bundle = service.searchOrganization(name)
+                SwingUtilities.invokeLater {
+                    log("${bundle.total} Treffer gefunden.")
+                    bundle.entry.take(5).forEach { e ->
+                        val org = e.resource as? org.hl7.fhir.r4.model.Organization
+                        log(" - ${org?.name ?: org?.idElement?.idPart ?: "?"}")
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Organisations-Suche: ${e.message}") }
+                logger.error("Fehler bei Organisations-Suche", e)
+            }
+        }
+    }
+
+    private fun testSearchPractitioner() {
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val name = JOptionPane.showInputDialog(this, "Nachname (leer = alle):", "Practitioner suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+
+        executor.execute {
+            try {
+                log("Suche Practitioner: \"$name\"...")
+                val bundle = service.searchPractitioner(name)
+                SwingUtilities.invokeLater {
+                    log("${bundle.total} Treffer gefunden.")
+                    bundle.entry.take(5).forEach { e ->
+                        val pract = e.resource as? org.hl7.fhir.r4.model.Practitioner
+                        val famName = pract?.nameFirstRep?.family ?: pract?.idElement?.idPart ?: "?"
+                        log(" - $famName")
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Practitioner-Suche: ${e.message}") }
+                logger.error("Fehler bei Practitioner-Suche", e)
+            }
+        }
+    }
+
+    private fun testCreateBefund() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Lege Befund an...")
+                val outcome = service.createBefund(kontext, "Test-Befund via Demoapp")
+                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Befund-Erstellung: ${e.message}") }
+                logger.error("Fehler bei Befund-Erstellung", e)
             }
         }
     }

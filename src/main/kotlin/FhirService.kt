@@ -1,4 +1,5 @@
 import ca.uhn.fhir.context.FhirContext
+import ca.uhn.fhir.model.api.annotation.ResourceDef
 import ca.uhn.fhir.rest.client.api.IClientInterceptor
 import ca.uhn.fhir.rest.client.api.IHttpRequest
 import ca.uhn.fhir.rest.client.api.IHttpResponse
@@ -13,6 +14,12 @@ import java.util.*
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 import constants.FhirConstants
+
+/** Lokale Custom-Resource-Klasse analog zu APS FhirApiBefund (erweitert Observation, Ressourcenname "Befund"). */
+@ResourceDef(name = "Befund", profile = FhirConstants.PROFILE_BEFUND)
+class FhirApiBefund : Observation() {
+    override fun fhirType(): String = "Befund"
+}
 
 class FhirService(private val baseUrl: String, private val apiKey: String, private val oAuthToken : String, private val providedCtx: FhirContext? = null) {
     private val logger = LoggerFactory.getLogger(FhirService::class.java)
@@ -333,6 +340,101 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
                 .execute()
         } catch (e: Exception) {
             throw wrapExceptionWithUrl(e, "sendTransactionBundle")
+        }
+    }
+
+    fun createPatient(kontextId: String): OperationOutcome {
+        try {
+            val patient = Patient()
+            setProfile(patient, FhirConstants.PROFILE_PATIENT)
+            addKontextIdentifier(patient, kontextId)
+
+            val name = patient.addName()
+            name.family = "Mustermann"
+            name.addGiven("Max")
+
+            patient.birthDateElement = DateType("1980-04-12")
+            patient.gender = Enumerations.AdministrativeGender.MALE
+
+            val result = client.create()
+                .resource(patient)
+                .execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "createPatient")
+        }
+    }
+
+    fun updatePatient(patientId: String, versionId: String?): OperationOutcome {
+        try {
+            val patient = readPatient(patientId)
+
+            // Telefonnummer als Demo-Änderung hinzufügen
+            val telecom = patient.addTelecom()
+            telecom.system = ContactPoint.ContactPointSystem.PHONE
+            telecom.value = "089 999999"
+            telecom.use = ContactPoint.ContactPointUse.HOME
+
+            val update = client.update().resource(patient).withId(patientId)
+            if (!versionId.isNullOrBlank()) {
+                update.withAdditionalHeader("If-Match", "W/\"$versionId\"")
+            }
+            val result = update.execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "updatePatient")
+        }
+    }
+
+    fun readEncounter(kontextId: String): Encounter {
+        try {
+            return client.read()
+                .resource(Encounter::class.java)
+                .withId(kontextId)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "readEncounter")
+        }
+    }
+
+    fun searchOrganization(name: String): Bundle {
+        try {
+            return client.search<Bundle>()
+                .forResource(Organization::class.java)
+                .where(Organization.NAME.matches().value(name))
+                .returnBundle(Bundle::class.java)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "searchOrganization")
+        }
+    }
+
+    fun searchPractitioner(name: String): Bundle {
+        try {
+            return client.search<Bundle>()
+                .forResource(Practitioner::class.java)
+                .where(Practitioner.FAMILY.matches().value(name))
+                .returnBundle(Bundle::class.java)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "searchPractitioner")
+        }
+    }
+
+    fun createBefund(kontextId: String, value: String): OperationOutcome {
+        try {
+            val befund = FhirApiBefund()
+            addKontextIdentifier(befund, kontextId)
+            befund.status = Observation.ObservationStatus.FINAL
+            befund.effective = DateTimeType(Date())
+            befund.value = StringType(value)
+
+            val result = client.create()
+                .resource(befund)
+                .execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "createBefund")
         }
     }
 
