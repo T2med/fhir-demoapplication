@@ -23,7 +23,6 @@ Wichtig:
 
 ### 2.1 Serverseitig (APS)
 
-- Feature `APS_37950_EXTERNE_FHIR_API_AKTIVIEREN` ist aktiv.
 - FHIR-Servlet ist aktiviert und unter `/aps/fhir/api` erreichbar.
 - Drittanbieter ist in APS aktiviert.
 
@@ -196,7 +195,7 @@ Implementierungsnahe Besonderheiten:
 
 ## 8. Kontaktdaten im Patient-Profil (Telefonnummer und Email)
 
-Ab Release 26.7 enthält die Patient-Ressource Kontaktdaten (Telefonnummern und E-Mail-Adressen) als FHIR `telecom`-Einträge.
+Die Patient-Ressource enthält Kontaktdaten (Telefonnummern und E-Mail-Adressen) als FHIR `telecom`-Einträge.
 
 ### 8.1 Telefonnummer
 
