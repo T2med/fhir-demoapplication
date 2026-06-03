@@ -264,7 +264,7 @@ Statuscodes:
 | HTTP | Bedeutung |
 | --- | --- |
 | `400` | Request formal ungültig, z. B. Profil fehlt oder Kontext-Identifier ist ungültig |
-| `403` | API-Key fehlt oder ist ungültig |
+| `403` | API-Key fehlt oder ist ungültig; beim Demo-API-Key auch: Limit von 100 Aufrufen pro Serverprozess überschritten |
 | `404` | Resource bei `read`, `search(identifier)` oder `update` nicht gefunden |
 | `409` | Versionskonflikt bei `Patient`-Update |
 | `422` | fachliche oder technische Verarbeitung fehlgeschlagen |
@@ -367,6 +367,7 @@ Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-
 | Demo-Verhalten | Demo nutzt einen dynamischen SSL-Kontext und akzeptiert lokale Zertifikate; produktiv sollte der Trust-Store verwaltet werden |
 | Kontext-ID | als kurzlebiges technisches Token behandeln |
 | Warnungen | `X-TreatWarningAsError` bewusst setzen |
+| Demo-API-Key-Limit | Bei Nutzung des Demo-API-Keys (t2demo-Client) sind maximal 100 API-Aufrufe pro Serverprozess möglich. Nach Erreichen des Limits liefert jeder weitere Aufruf `403 Forbidden`. Der Zähler wird nicht zurückgesetzt — für weitere Tests APS neu starten. |
 
 ## 11. Go-Live-Checkliste
 
