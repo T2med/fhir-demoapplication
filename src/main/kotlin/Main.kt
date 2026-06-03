@@ -191,7 +191,35 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                 val patient = service.searchPatientByKontext(kontext)
                 SwingUtilities.invokeLater {
                     if (patient != null) {
-                        log("Patient gefunden: ID=${patient.idElement.idPart}")
+                        log("=== Patient gefunden ===")
+                        log("ID:          ${patient.idElement.idPart}")
+                        log("Version:     ${patient.meta?.versionId ?: "-"}")
+                        val name = patient.nameFirstRep
+                        log("Name:        ${name.family ?: "-"}, ${name.givenAsSingleString.ifBlank { "-" }}")
+                        log("Geburtsdatum:${patient.birthDateElement?.valueAsString ?: "-"}")
+                        log("Geschlecht:  ${patient.gender?.display ?: "-"}")
+                        patient.address.forEach { adr ->
+                            val typ = adr.type?.display ?: adr.use?.display ?: "Adresse"
+                            val strasse = adr.line.joinToString(" ") { it.value }
+                            log("$typ:    ${strasse.ifBlank { "-" }}, ${adr.postalCode ?: ""} ${adr.city ?: ""} ${adr.country ?: ""}".trimEnd())
+                        }
+                        if (patient.telecom.isEmpty()) {
+                            log("Telefon/Email: (keine Einträge)")
+                        } else {
+                            patient.telecom.forEach { tc ->
+                                val system = tc.system?.display ?: "?"
+                                val use = tc.use?.display?.let { " ($it)" } ?: ""
+                                val kommentar = tc.getExtensionByUrl("https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar")
+                                    ?.value?.primitiveValue()?.let { " [Kommentar: $it]" } ?: ""
+                                val kategorie = tc.getExtensionByUrl("https://fhir.t2med.de/StructureDefinition/FhirApiTelefonnummerKategorie")
+                                    ?.value?.primitiveValue()?.let { " [Kategorie: $it]" } ?: ""
+                                log("$system$use: ${tc.value ?: "-"}$kategorie$kommentar")
+                            }
+                        }
+                        patient.identifier.forEach { id ->
+                            log("Identifier:  system=${id.system ?: "-"}, value=${id.value ?: "-"}")
+                        }
+                        log("========================")
                     } else {
                         log("Kein Patient für diesen Kontext gefunden.")
                     }
