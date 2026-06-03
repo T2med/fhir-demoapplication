@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-06-02**
+Stand: **2026-06-03**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -10,91 +10,134 @@ Die Integration ist kontextbasiert:
 
 1. Die Drittanbieter-Software wird durch Nutzerinteraktion aus dem APS-Client heraus per Deep Link aufgerufen. Dafür wird im APS ein temporärer Kontext erstellt.
 2. Der Drittanbieter ruft die FHIR-API mit `X-API-Key` auf.
-3. Der Drittanbieter übergibt die `kontextId` als FHIR-Identifier in kontextgebundenen Ressourcen.
+3. Der Drittanbieter übergibt die `kontextId` als FHIR-Identifier oder als `Encounter`-Referenz in kontextgebundenen Ressourcen.
 4. APS ordnet die Daten dem Kontext zu und schreibt sie in die Fachdomäne.
 
 Wichtig:
 
-- Der Kontext-Identifier lautet `system=https://fhir.t2med.de/identifier/kontext`, `value=<kontextId>`.
-- Ohne gültigen Kontext können kontextgebundene `create`-Operationen sowie `GET /Patient?identifier=...` nicht verarbeitet werden.
-- Die aktuelle Implementierung hält Kontexte bis zu 4 Stunden vor und bereinigt sie stündlich.
+| Thema | Vorgabe |
+| --- | --- |
+| Kontext-Identifier | `system=https://fhir.t2med.de/identifier/kontext`, `value=<kontextId>` |
+| Encounter-Referenz | `Encounter/<kontextId>` |
+| Kontextdauer | Kontexte werden bis zu 4 Stunden vorgehalten und stündlich bereinigt. |
+| Kontextpflicht | Kontextgebundene `create`-Operationen und `GET /Patient?identifier=...` benötigen einen gültigen Kontext. |
 
 ## 2. Voraussetzungen
 
 ### 2.1 Serverseitig (APS)
 
-- FHIR-Servlet ist aktiviert und unter `/aps/fhir/api` erreichbar.
-- Drittanbieter ist in APS aktiviert.
+| Voraussetzung | Wert |
+| --- | --- |
+| FHIR-Servlet | unter `/aps/fhir/api/r4` erreichbar |
+| Drittanbieter | in APS aktiviert |
 
 ### 2.2 Drittanbieter-seitig
 
-- HTTPS-Client für FHIR R4 JSON.
-- Unterstützung für lokale HTTPS-Endpunkte des APS-Servers.
-- Unterstützung für installationsspezifisch erzeugte Server-Zertifikate des lokalen APS-Servers.
-- Konfigurierbare Header:
-  - `X-API-Key` als Pflichtheader
-  - `X-TreatWarningAsError` optional
-  - `X-FHIR-Profile` für `Patient`-Read und `Patient`-Search
-- Auswertung der Deep-Link-Parameter `kontextId`, `fhirBasisUrl`, `oAuthToken`.
-- Unterstützung für `OperationOutcome`.
+| Voraussetzung | Erwartung |
+| --- | --- |
+| FHIR-Client | HTTPS-Client für FHIR R4 |
+| Lokale HTTPS-Endpunkte | lokale APS-Server-URLs werden unterstützt |
+| Lokale Zertifikate | installationsspezifische APS-Server-Zertifikate werden unterstützt |
+| Pflichtheader serverseitig | `X-API-Key` |
+| Optionale Serverheader | `X-TreatWarningAsError`, `X-FHIR-Profile` |
+| Demo-Header | `Authorization`, `Prefer`, `X-TreatWarningAsError`, `Content-Type` |
+| Deep-Link-Parameter | `kontextId`, `fhirBasisUrl`, `oAuthToken` |
+| Fehlerformat | `OperationOutcome` auswerten |
 
 ## 3. Authentifizierung und Header
 
-Pflichtheader:
+Serverseitig zwingend:
 
-- `X-API-Key: <API_KEY>`
-- `Authorization: Bearer <oAuthToken>`
-- `Prefer: return=OperationOutcome`
+| Header | Pflicht | Bedeutung |
+| --- | --- | --- |
+| `X-API-Key: <API_KEY>` | ja | API-Key des aktivierten Drittanbieters. |
 
-Optionale Header:
+Vom aktuellen Democlient zusätzlich gesendet:
 
-- `X-TreatWarningAsError: true|false`
-  - fehlt oder `true` => Warnungen werden als Fehler behandelt
-  - `false` => Warnungen bleiben Warnungen
-- `X-FHIR-Profile: <profil-url>|1.0.0`
-  - wird nur für `Patient`-Read und `Patient`-Search ausgewertet
-  - ohne Header wird `https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0` verwendet
+| Header | Pflicht aus Serversicht | Bedeutung |
+| --- | --- | --- |
+| `Authorization: Bearer <oAuthToken>` | nein | Wird aus dem Deep-Link-Parameter `oAuthToken` gebildet. |
+| `Prefer: return=OperationOutcome` | nein | Democlient erwartet `OperationOutcome` als Create-Ergebnis. |
+| `X-TreatWarningAsError: true` | nein | Warnungen werden als Fehler behandelt. |
+| `Content-Type: application/fhir+xml; charset=UTF-8` | nein | Aktueller Democlient-Header. Für JSON-Beispiele `application/fhir+json` verwenden. |
+
+Optionale FHIR-API-Header:
+
+| Header | Verhalten |
+| --- | --- |
+| `X-TreatWarningAsError: true\|false` | fehlt oder `true` => Warnungen werden als Fehler behandelt; `false` => Warnungen bleiben Warnungen. |
+| `X-FHIR-Profile: <profil-url>\|1.0.0` | wird nur für `Patient`-Read und `Patient`-Search ausgewertet; ohne Header wird `FhirApiPatient` verwendet. |
+| `Accept: application/fhir+json` | sinnvoll für JSON-Antworten; wird in den JSON-Beispielen verwendet. |
 
 Wichtig:
 
-- `oAuthToken` wird nur dann vom APS-Client im Deep Link übergeben, wenn bei der Kontext-Anlage ein `loginToken` erzeugt wurde.
-- `oAuthToken` ist der Parameternamen im Deep Link; in der Response der Kontext-Boundary heißt derselbe Wert `loginToken`.
-- Ein `loginToken` wird nur für bekannte, aktivierte Produkte mit hinterlegter `clientId` erzeugt.
+| Thema | Erklärung |
+| --- | --- |
+| `loginToken` | Wird von `/aps/rest/fhir/api/kontext/anlegen` geliefert, wenn das aktivierte Produkt eine `clientId` hat. |
+| `oAuthToken` | Parametername im Deep Link; enthält das `loginToken` aus der Kontext-Boundary. |
+| Leerer Token | Wenn kein `loginToken` erzeugt wird, ersetzt der APS-Client `${oAuthToken}` durch einen leeren Wert. |
+| `fhirBasisUrl` | Muss unverändert als Basis-URL des FHIR-Clients verwendet werden. |
 
 Typische Fehler:
 
-- `403 Forbidden`: API-Key fehlt oder ist ungültig.
-- `503 Service Unavailable`: FHIR-API ist per Feature-Flag nicht freigeschaltet.
+| HTTP | Bedeutung |
+| --- | --- |
+| `403 Forbidden` | API-Key fehlt oder ist ungültig. |
+| `503 Service Unavailable` | FHIR-API ist per Feature-Flag nicht freigeschaltet. |
 
 Hinweise aus der Kontext-Anlage:
 
-- Unbekanntes Produkt: Kontext-Anlage liefert Validierungsfehler.
-- Nicht aktiviertes Produkt: Kontext-Anlage liefert Validierungsfehler.
-- Aktiviertes Produkt ohne Auth-Registrierung: Kontext wird angelegt, aber `loginToken` bleibt leer und es wird ein Info-Hinweis zurückgegeben.
+| Fall | Verhalten |
+| --- | --- |
+| Unbekanntes Produkt | Kontext-Anlage liefert Validierungsfehler. |
+| Nicht aktiviertes Produkt | Kontext-Anlage liefert Validierungsfehler. |
+| Aktiviertes Produkt ohne Auth-Registrierung | Kontext wird angelegt, `loginToken` bleibt leer, es wird ein Info-Hinweis zurückgegeben. |
 
 ## 4. Endpunktübersicht (Drittanbietersicht)
 
 Externe FHIR-API:
 
-- Basis: `/aps/fhir/api`
-- Ressourcen:
-  - `GET /Patient?identifier=<system>|<value>`
-  - `GET /Patient?family=...&given=...&birthdate=...`
-  - `GET /Patient/{id}`
-  - `POST /Observation`
-  - `POST /Condition`
-  - `POST /Procedure`
-  - `POST /DocumentReference`
-  - `POST /` für FHIR-Transaction-Bundles
+| Thema | Wert |
+| --- | --- |
+| Basis | `/aps/fhir/api/r4` |
+| Format in Beispielen | FHIR JSON |
+| Demo-Formatheader | `application/fhir+xml; charset=UTF-8` |
+
+Ressourcen:
+
+| HTTP | Pfad | Unterstützte Operation |
+| --- | --- | --- |
+| `POST` | `/Patient` | Patient anlegen |
+| `GET` | `/Patient?identifier=<system>\|<value>` | Patient per Kontext-Identifier suchen |
+| `GET` | `/Patient?family=...&given=...&birthdate=...` | Patient per Name/Geburtsdatum suchen |
+| `GET` | `/Patient/{id}` | Patient lesen |
+| `PUT` | `/Patient/{id}` | Patient aktualisieren |
+| `GET` | `/Encounter/{id}` | Encounter aus Kontext lesen |
+| `GET` | `/Organization/{id}` | Organisation lesen |
+| `GET` | `/Organization?name=...&identifier=...` | Organisation nach Name/BSNR suchen |
+| `GET` | `/Organization?practitioner=...` | Organisationen zu Practitioner suchen |
+| `GET` | `/Practitioner/{id}` | Practitioner lesen |
+| `GET` | `/Practitioner?name=...&identifier=...` | Practitioner nach Name/LANR suchen |
+| `GET` | `/Organization/{id}/Practitioner` | implementierungsnaher Compartment-Sonderfall; Handler liefert aktuell Organisationen zur übergebenen Arztrollen-ID |
+| `POST` | `/Observation` | Observation anlegen |
+| `POST` | `/Befund` | Custom Resource `Befund` anlegen |
+| `POST` | `/Condition` | Diagnose anlegen |
+| `POST` | `/Procedure` | Therapie oder Prozedere anlegen |
+| `POST` | `/DocumentReference` | Freitext oder Anhang anlegen |
+| `POST` | `/` | FHIR-Transaction-Bundle |
 
 Profilübersicht:
 
 | Ressource | Profil | Unterstützte Operationen |
 | --- | --- | --- |
-| Patient | `https://fhir.t2med.de/StructureDefinition/FhirApiPatient\|1.0.0` | `read`, `search(identifier)`, `search(family/given/birthdate)` |
+| Patient | `https://fhir.t2med.de/StructureDefinition/FhirApiPatient\|1.0.0` | `create`, `read`, `update`, `search(identifier)`, `search(family/given/birthdate)` |
+| Encounter | `https://fhir.t2med.de/StructureDefinition/FhirApiEncounter\|1.0.0` | `read` |
+| Organization | `https://fhir.t2med.de/StructureDefinition/FhirApiOrganization\|1.0.0` | `read`, `search(name/identifier)`, `search(practitioner)` |
+| Practitioner | `https://fhir.t2med.de/StructureDefinition/FhirApiPractitioner\|1.0.0` | `read`, `search(name/identifier)`, registrierter `Organization`-Compartment-Sonderfall |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` | `create` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund\|1.0.0` | `create` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext\|1.0.0` | `create` |
+| Befund | `https://fhir.t2med.de/StructureDefinition/FhirApiBefund\|1.0.0` | `create` |
 | Condition | `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` | `create` |
@@ -107,66 +150,99 @@ Kontext-Management und Drittanbieter-Freischaltung erfolgen APS-intern unter `/a
 
 ### 5.1 Schritt 1: Kontext bereitstellen lassen
 
-- Kontext wird über die APS-interne Boundary `/aps/rest/fhir/api/kontext/anlegen` erzeugt.
-- Pflichtfelder dort: `hersteller`, `produkt`, `patientId`, `arztrolleId`, `behandlungsortId`.
-- Optionales Feld dort: `behandlungsfallId`.
-- Die Response liefert `kontext`, `fhirApiBase` und abhängig vom Produkt zusätzlich einen `loginToken`.
-- Aus Sicht des Drittanbieters erfolgt der Einstieg typischerweise über einen Deep Link aus dem APS-Client.
-- Der Deep Link enthält `kontextId`, `fhirBasisUrl` und `oAuthToken`.
-- Der APS-Client befüllt `oAuthToken` aus dem von `/aps/rest/fhir/api/kontext/anlegen` gelieferten `loginToken`.
-- `fhirBasisUrl` ist unverändert als Basis-URL des FHIR-Clients zu verwenden.
-- Wenn `oAuthToken` mitgeliefert wird, ist es als `Authorization: Bearer <oAuthToken>` mitzusenden.
+| Schritt | Beschreibung |
+| --- | --- |
+| Kontextanlage | APS ruft intern `/aps/rest/fhir/api/kontext/anlegen` auf. |
+| Pflichtfelder | `hersteller`, `produkt`, `patientId`, `arztrolleId`, `behandlungsortId` |
+| Optionales Feld | `behandlungsfallId` |
+| Response | `kontext`, `aufrufUrlTemplate`, `fhirApiBase`, abhängig vom Produkt `loginToken` |
+| Deep Link | APS-Client ersetzt `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}` im `aufrufUrlTemplate`. |
+| `oAuthToken` | Der APS-Client befüllt den Parameter aus dem `loginToken`. |
+| `fhirBasisUrl` | Zusammengesetzt aus APS-Basis-URL und `fhirApiBase`; unverändert im Drittanbieter-Client verwenden. |
+
+Beispiel für ein Template:
+
+```text
+t2demo://?kontextId=${kontextId}&fhirBasisUrl=${fhirBasisUrl}&oAuthToken=${oAuthToken}
+```
 
 ### 5.2 Schritt 2: Optional Patient laden oder validieren
 
-- Für Kontextvalidierung: `GET /aps/fhir/api/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`
-- Unterstütztes Header-Profil:
-  - `https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0`
+| Zweck | Request |
+| --- | --- |
+| Kontextvalidierung | `GET /aps/fhir/api/r4/Patient?identifier=https://fhir.t2med.de/identifier/kontext\|<KONTEXT_ID>` |
+| Header-Profil | `X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient\|1.0.0` |
 
 ### 5.3 Schritt 3: Fachdaten schreiben
 
 Je nach Anwendungsfall:
 
-- `Observation` für Anamnese, Befund oder Freitext
-- `Condition` für Diagnosen
-- `Procedure` für Therapie oder Prozedere
-- `DocumentReference` für Freitext
-- `DocumentReference` für eingebettete Anhänge/Datei-Upload
+| Ressource | Anwendungsfall |
+| --- | --- |
+| `Observation` | Anamnese, Befund oder Freitext |
+| `Befund` | Custom Befund-Ressource |
+| `Condition` | Diagnosen |
+| `Procedure` | Therapie oder Prozedere |
+| `DocumentReference` | Freitext oder eingebetteter Anhang/Datei-Upload |
+| `Patient` | Patient anlegen oder aktualisieren |
 
-Für alle kontextgebundenen Ressourcen gilt:
+Für kontextgebundene Ressourcen gilt:
 
-- `identifier.system = https://fhir.t2med.de/identifier/kontext`
-- `identifier.value = <KONTEXT_ID>`
-- `meta.profile[0]` muss ein unterstütztes Profil enthalten
+| Variante | FHIR-Element |
+| --- | --- |
+| Kontext-Identifier | `identifier.system = https://fhir.t2med.de/identifier/kontext`, `identifier.value = <KONTEXT_ID>` |
+| Encounter-Referenz | `encounter.reference = Encounter/<KONTEXT_ID>` |
+| Profil | `meta.profile[0]` muss ein unterstütztes Profil enthalten |
+
+Für eine enthaltene `Encounter`-Ressource gelten diese Referenz-Prefixe:
+
+| Kontextbestandteil | Referenz |
+| --- | --- |
+| Patient | `Patient/<patientObjectId>` |
+| Behandlungsfall | `EpisodeOfCare/<behandlungsfallObjectId>` |
+| Arztrolle | `Practitioner/<arztrolleObjectId>` |
+| Behandlungsort | aktueller Implementierungsstand: `Organisation/<behandlungsortObjectId>` |
 
 Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt zusätzlich:
 
-- `description` ist Pflicht.
-- `content[0].attachment.data` muss den Base64-kodierten Anhang enthalten.
-- `content[0].attachment.contentType` ist Pflicht.
-- `content[0].attachment.title` ist optional.
-- Der Zeitpunkt wird bevorzugt aus `content[0].attachment.creation`, ersatzweise aus `DocumentReference.date` gelesen.
-- Optional kann die Extension `https://fhir.t2med.de/StructureDefinition/FhirApiAnhangKuerzel` gesetzt werden.
+| Element | Vorgabe |
+| --- | --- |
+| `description` | Pflicht |
+| `content[0].attachment.data` | Pflicht, Base64-kodierter Anhang |
+| `content[0].attachment.contentType` | Pflicht |
+| `content[0].attachment.title` | optional |
+| Zeitpunkt | bevorzugt `content[0].attachment.creation`, ersatzweise `DocumentReference.date` |
+| Kürzel | optional über `https://fhir.t2med.de/StructureDefinition/FhirApiAnhangKuerzel` |
 
 ### 5.4 Schritt 4: Optional als Transaction bündeln
 
-- `POST /aps/fhir/api` mit `Bundle.type = transaction`
-- Pro Entry ist nur `request.method = POST` implementiert.
-- Bei `error` oder `fatal` in einem Entry-`OperationOutcome` wird die Gesamttransaktion auf Rollback markiert.
+| Thema | Vorgabe |
+| --- | --- |
+| Endpoint | `POST /aps/fhir/api/r4` |
+| Bundle | `Bundle.type = transaction` |
+| Entry-Methode | nur `request.method = POST` implementiert |
+| Entry-URL | Democlient nutzt relative Resource-Namen wie `Observation` oder `Condition` |
+| Rollback | Bei `error` oder `fatal` in einem Entry-`OperationOutcome` wird die Gesamttransaktion auf Rollback markiert. |
 
 ### 5.5 Schritt 5: Kontextabschluss
 
-- Nach Abschluss kann der Kontext über `/aps/rest/fhir/api/kontext/entfernen` entfernt werden.
-- Kontext-IDs nicht wiederverwenden.
+| Schritt | Beschreibung |
+| --- | --- |
+| Entfernen | Kontext kann über `/aps/rest/fhir/api/kontext/entfernen` entfernt werden. |
+| Wiederverwendung | Kontext-IDs nicht wiederverwenden. |
 
 ## 6. Unterstützte Profile (Kurzfassung)
 
 | Ressource | Profil |
 | --- | --- |
 | Patient | `https://fhir.t2med.de/StructureDefinition/FhirApiPatient\|1.0.0` |
+| Encounter | `https://fhir.t2med.de/StructureDefinition/FhirApiEncounter\|1.0.0` |
+| Organization | `https://fhir.t2med.de/StructureDefinition/FhirApiOrganization\|1.0.0` |
+| Practitioner | `https://fhir.t2med.de/StructureDefinition/FhirApiPractitioner\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext\|1.0.0` |
+| Befund | `https://fhir.t2med.de/StructureDefinition/FhirApiBefund\|1.0.0` |
 | Condition | `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` |
@@ -177,27 +253,48 @@ Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt 
 
 Empfehlungen:
 
-- Immer `OperationOutcome` auswerten.
-- Diese Statuscodes explizit behandeln:
-  - `400`: Request formal ungültig, z. B. Profil fehlt oder Kontext-Identifier fehlt
-  - `403`: API-Key fehlt oder ist ungültig
-  - `422`: fachliche oder technische Verarbeitung fehlgeschlagen
-  - `501`: Profil nicht unterstützt
-  - `503`: FHIR-API per Feature-Flag deaktiviert
-- Zusätzlich `404` für `Patient`-Read oder `Patient`-Suche per Kontext-Identifier berücksichtigen.
-- Retry nur bei transienten technischen Fehlern, nicht bei fachlichen `4xx`.
+| Empfehlung | Begründung |
+| --- | --- |
+| `OperationOutcome` immer auswerten | Fachliche Fehler und Warnungen werden darüber transportiert. |
+| `4xx` nicht automatisch wiederholen | Meist fachliche oder formale Fehler. |
+| Transiente technische Fehler gezielt wiederholen | Dafür `X-Request-Id` stabil halten, wenn verwendet. |
+
+Statuscodes:
+
+| HTTP | Bedeutung |
+| --- | --- |
+| `400` | Request formal ungültig, z. B. Profil fehlt oder Kontext-Identifier ist ungültig |
+| `403` | API-Key fehlt oder ist ungültig |
+| `404` | Resource bei `read`, `search(identifier)` oder `update` nicht gefunden |
+| `409` | Versionskonflikt bei `Patient`-Update |
+| `422` | fachliche oder technische Verarbeitung fehlgeschlagen |
+| `501` | Profil nicht unterstützt |
+| `503` | FHIR-API per Feature-Flag deaktiviert |
 
 Implementierungsnahe Besonderheiten:
 
-- `GET /Patient?family=...&given=...&birthdate=...` liefert bei fehlenden Suchparametern aktuell kein `4xx`, sondern ein leeres Suchergebnis.
-- `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` liefert Validierungsfehler, wenn `description`, `attachment.data` oder `attachment.contentType` fehlen.
-- Für `DocumentReference`-Anhänge werden zu langer Beschreibungstext und ein zu langes Kürzel als Warnungen behandelt.
+| Fall | Verhalten |
+| --- | --- |
+| `GET /Patient?family=...&given=...&birthdate=...` ohne Parameter | Suchservice wird mit leeren Spezifikationen aufgerufen; die Antwort ist eine Suchmenge. |
+| `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang\|1.0.0` | Validierungsfehler, wenn `description`, `attachment.data` oder `attachment.contentType` fehlen. |
+| `GET /Organization/{id}/Practitioner` | Endpoint ist registriert, der aktuelle Handler interpretiert `{id}` aber als Practitioner-/Arztrollen-ID und gibt `Organization`-Ressourcen zurück. Für Drittanbieter ist `GET /Organization?practitioner=<id>` die fachlich klarere Variante. |
+| Warnungen | Ohne `X-TreatWarningAsError: false` werden Warnungen als Fehler behandelt. |
+| Demo-Content-Type | Demo sendet XML-Content-Type; JSON-Beispiele müssen JSON-Content-Type setzen. |
 
-## 8. Kontaktdaten im Patient-Profil (Telefonnummer und Email)
+## 8. Verwendete Code-Systeme (insb. `Condition`)
+
+| Anwendungsfall | System-URL | Codes |
+| --- | --- | --- |
+| ICD-Diagnose in `Condition.code.coding` | `http://fhir.de/CodeSystem/bfarm/icd-10-gm` | ICD-10-GM-Code in `coding.code`, Version optional in `coding.version` |
+| Diagnosesicherheit | `https://fhir.kbv.de/CodeSystem/KBV_CS_SFHIR_ICD_DIAGNOSESICHERHEIT` | `V`, `G`, `A`, `Z` |
+| Seitenlokalisation | `https://fhir.kbv.de/CodeSystem/KBV_CS_SFHIR_ICD_SEITENLOKALISATION` | `L`, `R`, `B` |
+| Diagnose-Relevanz | `https://fhir.t2med.de/CodeSystem/FhirApiDiagnoseRelevanz` | `akut`, `dauerhaft`, `anamnestisch` |
+
+## 9. Kontaktdaten im Patient-Profil (Telefonnummer und Email)
 
 Die Patient-Ressource enthält Kontaktdaten (Telefonnummern und E-Mail-Adressen) als FHIR `telecom`-Einträge.
 
-### 8.1 Telefonnummer
+### 9.1 Telefonnummer
 
 | Feld | FHIR-Mapping | Mögliche Werte |
 | --- | --- | --- |
@@ -227,7 +324,7 @@ Beispiel:
 }
 ```
 
-### 8.2 E-Mail-Adresse
+### 9.2 E-Mail-Adresse
 
 | Feld | FHIR-Mapping | Mögliche Werte |
 | --- | --- | --- |
@@ -252,40 +349,36 @@ Beispiel:
 }
 ```
 
-### 8.3 Verhalten bei leeren Kontaktdaten
+### 9.3 Verhalten bei leeren Kontaktdaten
 
 Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-Ressource kein `telecom`-Array.
 
-## 9. Verwendete Code-Systeme (insb. `Condition`)
-
-| Anwendungsfall | System-URL | Codes |
-| --- | --- | --- |
-| ICD-Diagnose in `Condition.code.coding` | `http://fhir.de/CodeSystem/bfarm/icd-10-gm` | ICD-10-GM-Code in `coding.code`, Version optional in `coding.version` |
-| Diagnosesicherheit | `https://fhir.kbv.de/CodeSystem/KBV_CS_SFHIR_ICD_DIAGNOSESICHERHEIT` | `V`, `G`, `A`, `Z` |
-| Seitenlokalisation | `https://fhir.kbv.de/CodeSystem/KBV_CS_SFHIR_ICD_SEITENLOKALISATION` | `L`, `R`, `B` |
-| Diagnose-Relevanz | `https://fhir.t2med.de/CodeSystem/FhirApiDiagnoseRelevanz` | `akut`, `dauerhaft`, `anamnestisch` |
-
 ## 10. Sicherheits- und Betriebsaspekte
 
-- API-Key nie im Klartext loggen.
-- TLS für alle FHIR-Aufrufe erzwingen.
-- Die FHIR-API wird im lokalen Installationsfall über `https://` bereitgestellt.
-- Das APS-Server-Zertifikat wird bei der Installation installationsspezifisch erzeugt.
-- Drittanbieter dürfen deshalb nicht voraussetzen, dass das APS-Zertifikat über eine öffentliche CA vertrauenswürdig ist.
-- Bei `fhirBasisUrl` mit `https://` ist ein eigener SSL-Kontext bzw. HTTP-Client zu konfigurieren.
-- Der Drittanbieter-Client muss dabei auch lokale Hosts wie `localhost`, `127.0.0.1` oder den lokal konfigurierten Hostnamen unterstützen.
-- Die Referenzimplementierung setzt für jede `https://`-Basis-URL eine eigene SSL-Konfiguration, damit auch lokal erzeugte Zertifikate des APS-Servers akzeptiert werden können.
-- Kontext-IDs als kurzlebige technische Tokens behandeln.
-- `X-TreatWarningAsError` bewusst setzen. Ohne Header ist das Verhalten identisch zu `true`.
+| Thema | Vorgabe |
+| --- | --- |
+| API-Key | nie im Klartext loggen |
+| Transport | FHIR-Aufrufe über TLS durchführen |
+| Lokaler APS-Server | FHIR-API wird lokal über `https://` bereitgestellt |
+| Zertifikat | APS-Server-Zertifikat wird installationsspezifisch erzeugt |
+| Öffentliche CA | Drittanbieter dürfen keine öffentliche CA-signierte Zertifikatskette voraussetzen |
+| HTTPS-Client | Bei `fhirBasisUrl` mit `https://` eigenen SSL-Kontext bzw. HTTP-Client konfigurieren |
+| Lokale Hosts | `localhost`, `127.0.0.1` und lokal konfigurierte Hostnamen unterstützen |
+| Demo-Verhalten | Demo nutzt einen dynamischen SSL-Kontext und akzeptiert lokale Zertifikate; produktiv sollte der Trust-Store verwaltet werden |
+| Kontext-ID | als kurzlebiges technisches Token behandeln |
+| Warnungen | `X-TreatWarningAsError` bewusst setzen |
 
 ## 11. Go-Live-Checkliste
 
 - [ ] Drittanbieter in APS aktiviert
 - [ ] API-Key vorhanden und sicher hinterlegt
+- [ ] `drittanbieterKey` bzw. Hersteller/Produkt korrekt konfiguriert
 - [ ] Verarbeitung der Deep-Link-Parameter `kontextId`, `fhirBasisUrl`, `oAuthToken` implementiert
+- [ ] `fhirBasisUrl` unverändert als FHIR-Client-Basis-URL verwendet
 - [ ] Eigener SSL-Kontext/HTTP-Client für lokale `https://`-APS-Server eingerichtet
 - [ ] Test mit installationsspezifischem lokalem APS-Zertifikat durchgeführt
-- [ ] Test: Aufruf durch T2med-Client über Deep-Link
+- [ ] Test mit `localhost`, `127.0.0.1` oder lokal konfiguriertem Hostnamen durchgeführt
+- [ ] Test: Aufruf durch T2med-Client über Deep Link
 - [ ] Test: `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`
 - [ ] Test: gewünschte `POST`-Ressourcentypen mit korrektem `meta.profile`
 - [ ] Test: `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0`
@@ -295,12 +388,12 @@ Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-
 
 ## 12. Schnellstart (Minimalfluss)
 
-1. Kontext über APS bereitstellen oder übernehmen.
-2. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
-3. HTTPS-Client für `fhirBasisUrl` mit passender SSL-Konfiguration initialisieren.
-4. `GET /aps/fhir/api/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>` mit `X-API-Key` ausführen.
-5. `Authorization: Bearer <oAuthToken>` und `Prefer: return=OperationOutcome` mitsenden.
-6. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier anlegen.
+1. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
+2. HTTPS-Client für `fhirBasisUrl` mit passender SSL-Konfiguration initialisieren.
+3. `X-API-Key` bei jedem FHIR-Aufruf mitsenden.
+4. Optional wie die Demo `Authorization: Bearer <oAuthToken>`, `Prefer: return=OperationOutcome` und `X-TreatWarningAsError: true` mitsenden.
+5. `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>` ausführen.
+6. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier oder Encounter-Referenz anlegen.
 7. `OperationOutcome` und HTTP-Status auswerten.
 8. Kontext bei Bedarf entfernen und nicht wiederverwenden.
 
@@ -308,19 +401,22 @@ Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-
 
 Hinweise:
 
-- Alle Beispiele verwenden Platzhalter wie `<HOST>`, `<API_KEY>`, `<KONTEXT_ID>`.
-- Für FHIR JSON sollten `Content-Type` und `Accept` auf `application/fhir+json` gesetzt werden.
-- Bei `create`-Operationen ist `X-FHIR-Profile` nicht erforderlich; maßgeblich ist `meta.profile`.
-- Falls ein `loginToken` erzeugt wurde, wird der Drittanbieter typischerweise über eine URL der Form `<AUFRUF_PLATZHALTER>://?kontextId=<...>&fhirBasisUrl=<...>&oAuthToken=<...>` geöffnet.
+| Thema | Hinweis |
+| --- | --- |
+| Platzhalter | Beispiele verwenden `<HOST>`, `<API_KEY>`, `<KONTEXT_ID>`, `<OAUTH_TOKEN>`. |
+| JSON | Für JSON `Content-Type` und `Accept` auf `application/fhir+json` setzen. |
+| Demo | Der aktuelle Democlient setzt global `Content-Type: application/fhir+xml; charset=UTF-8`. |
+| `X-FHIR-Profile` | Bei `create`-Operationen nicht erforderlich; maßgeblich ist `meta.profile`. |
+| Deep Link | Der APS-Client öffnet das `aufrufUrlTemplate` nach Ersetzung von `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}`. |
 
-### 1. Externe FHIR-HTTP API (`/aps/fhir/api`)
+### 1. Externe FHIR-HTTP API (`/aps/fhir/api/r4`)
 
 #### 1.1 Patient per Kontext-Identifier suchen
 
 **Request**
 
 ```http
-GET https://<HOST>/aps/fhir/api/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>
+GET https://<HOST>/aps/fhir/api/r4/Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
 Prefer: return=OperationOutcome
@@ -345,24 +441,6 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
       "system": "https://fhir.t2med.de/identifier/kontext",
       "value": "<KONTEXT_ID>"
     }
-  ],
-  "telecom": [
-    {
-      "system": "phone",
-      "value": "089 123456",
-      "use": "home",
-      "extension": [
-        {
-          "url": "https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar",
-          "valueString": "nur vormittags"
-        }
-      ]
-    },
-    {
-      "system": "email",
-      "value": "max.mustermann@example.de",
-      "use": "home"
-    }
   ]
 }
 ```
@@ -372,9 +450,9 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 **Request**
 
 ```http
-GET https://<HOST>/aps/fhir/api/Patient?family=must&given=max&birthdate=1980-04-12
+GET https://<HOST>/aps/fhir/api/r4/Patient?family=must&given=max&birthdate=1980-04-12
 Accept: application/fhir+json
-Authorization: Bearer <OAUTH_TOKEN>  # nur wenn im Deep Link vorhanden
+Authorization: Bearer <OAUTH_TOKEN>
 Prefer: return=OperationOutcome
 X-API-Key: <API_KEY>
 X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
@@ -406,7 +484,7 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 **Request**
 
 ```http
-GET https://<HOST>/aps/fhir/api/Patient/<PATIENT_OBJECT_ID>
+GET https://<HOST>/aps/fhir/api/r4/Patient/<PATIENT_OBJECT_ID>
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
 Prefer: return=OperationOutcome
@@ -433,7 +511,7 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 **Request**
 
 ```http
-POST https://<HOST>/aps/fhir/api/Observation
+POST https://<HOST>/aps/fhir/api/r4/Observation
 Content-Type: application/fhir+json
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
@@ -454,6 +532,7 @@ X-TreatWarningAsError: true
       "value": "<KONTEXT_ID>"
     }
   ],
+  "status": "final",
   "effectiveDateTime": "2026-01-29T08:36:00+01:00",
   "valueString": "leichtes Fieber"
 }
@@ -512,7 +591,7 @@ Zusätzlich mögliche Extension:
 **Request**
 
 ```http
-POST https://<HOST>/aps/fhir/api/DocumentReference
+POST https://<HOST>/aps/fhir/api/r4/DocumentReference
 Content-Type: application/fhir+json
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
@@ -532,6 +611,7 @@ X-API-Key: <API_KEY>
       "value": "<KONTEXT_ID>"
     }
   ],
+  "status": "current",
   "date": "2026-01-29T08:36:00+01:00",
   "content": [
     {
@@ -552,7 +632,7 @@ X-API-Key: <API_KEY>
 **Request**
 
 ```http
-POST https://<HOST>/aps/fhir/api/DocumentReference
+POST https://<HOST>/aps/fhir/api/r4/DocumentReference
 Content-Type: application/fhir+json
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
@@ -572,6 +652,7 @@ X-API-Key: <API_KEY>
       "value": "<KONTEXT_ID>"
     }
   ],
+  "status": "current",
   "date": "2026-01-29T08:36:00+01:00",
   "description": "Befundbericht als PDF",
   "extension": [
@@ -622,7 +703,7 @@ https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere|1.0.0
 **Request**
 
 ```http
-POST https://<HOST>/aps/fhir/api/Condition
+POST https://<HOST>/aps/fhir/api/r4/Condition
 Content-Type: application/fhir+json
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
@@ -663,7 +744,7 @@ X-API-Key: <API_KEY>
 **Request**
 
 ```http
-POST https://<HOST>/aps/fhir/api
+POST https://<HOST>/aps/fhir/api/r4
 Content-Type: application/fhir+json
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
@@ -677,7 +758,7 @@ X-API-Key: <API_KEY>
     {
       "request": {
         "method": "POST",
-        "url": "https://<HOST>/aps/fhir/api/Observation"
+        "url": "Observation"
       },
       "resource": {
         "resourceType": "Observation",
@@ -692,6 +773,7 @@ X-API-Key: <API_KEY>
             "value": "<KONTEXT_ID>"
           }
         ],
+        "status": "final",
         "effectiveDateTime": "2026-01-30T08:36:00+01:00",
         "valueString": "leichtes Fieber"
       }
