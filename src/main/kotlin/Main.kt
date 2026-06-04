@@ -388,9 +388,19 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                     return@execute
                 }
                 val patientId = patient.idElement.idPart
-                val versionId = patient.meta?.versionId
-                log("Patient gefunden: ID=$patientId, Version=$versionId — aktualisiere Telefonnummer...")
-                val outcome = service.updatePatient(patientId, versionId)
+                log("Patient gefunden: ID=$patientId — öffne Update-Dialog...")
+
+                val dialogRef = java.util.concurrent.atomic.AtomicReference<PatientUpdateDialog>()
+                SwingUtilities.invokeAndWait {
+                    val dlg = PatientUpdateDialog(this@DemoApp, patient)
+                    dialogRef.set(dlg)
+                    dlg.isVisible = true
+                }
+                val updateData = dialogRef.get().result ?: run {
+                    SwingUtilities.invokeLater { log("Update abgebrochen.") }
+                    return@execute
+                }
+                val outcome = service.updatePatient(patientId, updateData)
                 SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater { log("Fehler bei Patient-Update: ${e.message}") }
@@ -532,5 +542,154 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         }
 
         toFront()
+    }
+}
+
+/**
+ * Dialog zum Bearbeiten von Patientendaten.
+ * Felder werden aus der übergebenen Patient-Ressource vorausgefüllt.
+ * Nach Klick auf "Aktualisieren" steht das Ergebnis in [result].
+ */
+class PatientUpdateDialog(parent: JFrame, patient: org.hl7.fhir.r4.model.Patient) :
+    JDialog(parent, "Patient aktualisieren", true) {
+
+    var result: PatientUpdateData? = null
+        private set
+
+    init {
+        defaultCloseOperation = DISPOSE_ON_CLOSE
+        layout = java.awt.BorderLayout(10, 10)
+        val panel = JPanel(java.awt.GridBagLayout())
+        panel.border = BorderFactory.createEmptyBorder(12, 12, 4, 12)
+        val gbc = java.awt.GridBagConstraints().apply {
+            insets = java.awt.Insets(4, 4, 4, 4)
+            anchor = java.awt.GridBagConstraints.WEST
+        }
+
+        fun label(row: Int, text: String) {
+            gbc.gridx = 0; gbc.gridy = row; gbc.fill = java.awt.GridBagConstraints.NONE
+            panel.add(JLabel(text), gbc)
+        }
+        fun field(row: Int, comp: JComponent) {
+            gbc.gridx = 1; gbc.gridy = row; gbc.fill = java.awt.GridBagConstraints.HORIZONTAL
+            gbc.weightx = 1.0
+            panel.add(comp, gbc)
+            gbc.weightx = 0.0
+        }
+
+        // ── Stammdaten ──────────────────────────────────────────────────────
+        val tfNachname = JTextField(patient.nameFirstRep.family ?: "", 20)
+        val tfVorname  = JTextField(patient.nameFirstRep.givenAsSingleString, 20)
+        val tfGeburt   = JTextField(patient.birthDateElement?.valueAsString ?: "", 12)
+
+        val geschlechtItems = arrayOf("-", "Männlich", "Weiblich", "Divers", "Unbestimmt", "Unbekannt")
+        val cbGeschlecht = JComboBox(geschlechtItems)
+        // OTHER ausdifferenzieren: Amtlich-Extension auf genderElement prüfen (Code "D" = divers, "X" = unbestimmt)
+        val amtlichCode = patient.genderElement
+            ?.getExtensionByUrl("http://fhir.de/StructureDefinition/gender-amtlich-de")
+            ?.value?.let { (it as? Coding)?.code ?: it.primitiveValue() }
+        when {
+            patient.gender == Enumerations.AdministrativeGender.MALE    -> cbGeschlecht.selectedItem = "Männlich"
+            patient.gender == Enumerations.AdministrativeGender.FEMALE  -> cbGeschlecht.selectedItem = "Weiblich"
+            patient.gender == Enumerations.AdministrativeGender.UNKNOWN -> cbGeschlecht.selectedItem = "Unbekannt"
+            patient.gender == Enumerations.AdministrativeGender.OTHER && amtlichCode == "X" -> cbGeschlecht.selectedItem = "Unbestimmt"
+            patient.gender == Enumerations.AdministrativeGender.OTHER   -> cbGeschlecht.selectedItem = "Divers"
+            else -> cbGeschlecht.selectedItem = "-"
+        }
+
+        label(0, "Nachname:"); field(0, tfNachname)
+        label(1, "Vorname:");  field(1, tfVorname)
+        label(2, "Geburtsdatum (YYYY-MM-DD):"); field(2, tfGeburt)
+        label(3, "Geschlecht:"); field(3, cbGeschlecht)
+
+        // ── Vorhandene Kontaktdaten (read-only) ──────────────────────────────
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = java.awt.GridBagConstraints.NONE
+        panel.add(JLabel("Vorhandene Kontaktdaten:"), gbc)
+        gbc.gridwidth = 1
+
+        val existingText = if (patient.telecom.isEmpty()) "(keine)" else
+            patient.telecom.joinToString("\n") { tc ->
+                val sys = tc.system?.display ?: "?"
+                val use = tc.use?.display?.let { " ($it)" } ?: ""
+                "$sys$use: ${tc.value ?: "-"}"
+            }
+        val taExisting = JTextArea(existingText, 3, 30).apply {
+            isEditable = false
+            background = UIManager.getColor("Panel.background")
+            lineWrap = true; wrapStyleWord = true
+        }
+        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2
+        gbc.fill = java.awt.GridBagConstraints.BOTH; gbc.weighty = 0.3
+        panel.add(JScrollPane(taExisting), gbc)
+        gbc.gridwidth = 1; gbc.weighty = 0.0
+
+        // ── Neuen Kontakt hinzufügen ─────────────────────────────────────────
+        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2; gbc.fill = java.awt.GridBagConstraints.NONE
+        panel.add(JLabel("Neuen Kontakt hinzufügen:"), gbc)
+        gbc.gridwidth = 1
+
+        val cbTcTyp = JComboBox(arrayOf("(keiner)", "Telefon", "Fax", "Email"))
+        val cbTcUse = JComboBox(arrayOf("-", "Privat", "Geschäftlich", "Mobil"))
+        val tfTcWert = JTextField(20)
+
+        label(7, "Typ:"); field(7, cbTcTyp)
+        label(8, "Verwendung:"); field(8, cbTcUse)
+        label(9, "Wert:"); field(9, tfTcWert)
+
+        add(panel, java.awt.BorderLayout.CENTER)
+
+        // ── Buttons ──────────────────────────────────────────────────────────
+        val btnCancel = JButton("Abbrechen")
+        val btnOk     = JButton("Aktualisieren")
+        btnOk.isDefaultCapable = true
+        getRootPane().defaultButton = btnOk
+
+        btnCancel.addActionListener { dispose() }
+        btnOk.addActionListener {
+            val tcTypStr = cbTcTyp.selectedItem as String
+            val tcSystem = when (tcTypStr) {
+                "Telefon" -> ContactPoint.ContactPointSystem.PHONE
+                "Fax"     -> ContactPoint.ContactPointSystem.FAX
+                "Email"   -> ContactPoint.ContactPointSystem.EMAIL
+                else      -> null
+            }
+            val tcUseStr = cbTcUse.selectedItem as String
+            val tcUse = when (tcUseStr) {
+                "Privat"       -> ContactPoint.ContactPointUse.HOME
+                "Geschäftlich" -> ContactPoint.ContactPointUse.WORK
+                "Mobil"        -> ContactPoint.ContactPointUse.MOBILE
+                else           -> null
+            }
+            val tcWert = tfTcWert.text.trim()
+            val neuesTelecom = if (tcSystem != null && tcWert.isNotBlank())
+                TelecomEntry(tcSystem, tcUse, tcWert) else null
+
+            val geschlecht = when (cbGeschlecht.selectedItem as String) {
+                "Männlich"   -> Geschlecht.MAENNLICH
+                "Weiblich"   -> Geschlecht.WEIBLICH
+                "Divers"     -> Geschlecht.DIVERS
+                "Unbestimmt" -> Geschlecht.UNBESTIMMT
+                "Unbekannt"  -> Geschlecht.UNBEKANNT
+                else         -> null
+            }
+
+            result = PatientUpdateData(
+                nachname      = tfNachname.text.trim(),
+                vorname       = tfVorname.text.trim(),
+                geburtsdatum  = tfGeburt.text.trim(),
+                geschlecht    = geschlecht,
+                neuesTelecom  = neuesTelecom
+            )
+            dispose()
+        }
+
+        val btnPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT))
+        btnPanel.border = BorderFactory.createEmptyBorder(0, 12, 8, 12)
+        btnPanel.add(btnCancel)
+        btnPanel.add(btnOk)
+        add(btnPanel, java.awt.BorderLayout.SOUTH)
+
+        pack()
+        setLocationRelativeTo(parent)
     }
 }

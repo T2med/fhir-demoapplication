@@ -15,6 +15,38 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 import constants.FhirConstants
 
+/** Neuer Telecom-Eintrag (Telefon, Fax oder Email) für Patient-Update. */
+data class TelecomEntry(
+    val system: ContactPoint.ContactPointSystem,
+    val use: ContactPoint.ContactPointUse?,
+    val value: String
+)
+
+/**
+ * Die fünf deutschen Geschlechtswerte.
+ * DIVERS ("D") und UNBESTIMMT ("X") erfordern eine FHIR-Extension auf dem genderElement;
+ * ohne Extension würde der APS-Server `other` als UNBEKANNT interpretieren.
+ */
+enum class Geschlecht(
+    val fhirGender: Enumerations.AdministrativeGender,
+    val amtlichCode: String?   // null = keine Extension nötig
+) {
+    MAENNLICH(Enumerations.AdministrativeGender.MALE,    null),
+    WEIBLICH (Enumerations.AdministrativeGender.FEMALE,  null),
+    DIVERS   (Enumerations.AdministrativeGender.OTHER,   "D"),
+    UNBESTIMMT(Enumerations.AdministrativeGender.OTHER,  "X"),
+    UNBEKANNT(Enumerations.AdministrativeGender.UNKNOWN, null)
+}
+
+/** Felder, die beim Patient-Update gesetzt werden sollen. */
+data class PatientUpdateData(
+    val nachname: String,
+    val vorname: String,
+    val geburtsdatum: String,    // YYYY-MM-DD, leer = unverändert
+    val geschlecht: Geschlecht?,
+    val neuesTelecom: TelecomEntry?
+)
+
 /** Lokale Custom-Resource-Klasse analog zu APS FhirApiBefund (erweitert Observation, Ressourcenname "Befund"). */
 @ResourceDef(name = "Befund", profile = FhirConstants.PROFILE_BEFUND)
 class FhirApiBefund : Observation() {
@@ -365,21 +397,50 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
-    fun updatePatient(patientId: String, versionId: String?): OperationOutcome {
+    fun updatePatient(patientId: String, data: PatientUpdateData): OperationOutcome {
         try {
             val patient = readPatient(patientId)
 
-            // Telefonnummer als Demo-Änderung hinzufügen
-            val telecom = patient.addTelecom()
-            telecom.system = ContactPoint.ContactPointSystem.PHONE
-            telecom.value = "089 999999"
-            telecom.use = ContactPoint.ContactPointUse.HOME
+            // Namensdaten überschreiben
+            patient.name.clear()
+            val name = patient.addName()
+            name.family = data.nachname
+            if (data.vorname.isNotBlank()) name.addGiven(data.vorname)
 
-            val update = client.update().resource(patient).withId(patientId)
-            if (!versionId.isNullOrBlank()) {
-                update.withAdditionalHeader("If-Match", "W/\"$versionId\"")
+            // Geburtsdatum setzen (wenn angegeben)
+            if (data.geburtsdatum.isNotBlank()) {
+                patient.birthDateElement = DateType(data.geburtsdatum)
             }
-            val result = update.execute()
+
+            // Geschlecht setzen (wenn ausgewählt)
+            // DIVERS und UNBESTIMMT benötigen zusätzlich die Extension gender-amtlich-de,
+            // damit der APS-Server sie von UNBEKANNT unterscheiden kann.
+            data.geschlecht?.let { g ->
+                patient.gender = g.fhirGender
+                if (g.amtlichCode != null) {
+                    patient.genderElement.addExtension(
+                        Extension(
+                            "http://fhir.de/StructureDefinition/gender-amtlich-de",
+                            Coding("http://fhir.de/CodeSystem/gender-amtlich-de", g.amtlichCode, null)
+                        )
+                    )
+                }
+            }
+
+            // Neuen Telecom-Eintrag anhängen (wenn angegeben)
+            data.neuesTelecom?.let { tc ->
+                patient.addTelecom().apply {
+                    system = tc.system
+                    use = tc.use
+                    value = tc.value
+                }
+            }
+
+            // Version aus der ID entfernen: PUT /Patient/{id} statt /_history/{version}
+            // Der APS-Server löst bei /_history/-URL einen Versionskonflikt-Check aus (409),
+            // ohne Version-Suffix wird dieser Check übersprungen.
+            patient.setId(patient.idElement.toUnqualifiedVersionless())
+            val result = client.update().resource(patient).execute()
             return result.operationOutcome as OperationOutcome
         } catch (e: Exception) {
             throw wrapExceptionWithUrl(e, "updatePatient")
