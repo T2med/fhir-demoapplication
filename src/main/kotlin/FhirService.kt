@@ -527,8 +527,11 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         val url = lastUrlInterceptor.lastUrl ?: baseUrl
         println("[DEBUG] Fehler bei $methodName - URL war: $url")
         if (e is ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException) {
-            // Bei FHIR-Server-Fehlern (404 etc.) die URL in die Nachricht einbauen
-            return Exception("${e.message} (URL: $url)", e)
+            val msg = e.message ?: ""
+            if (e.statusCode == 403 && msg.contains("fehlt oder ist ungültig")) {
+                return Exception("Demo-API-Key-Limit erreicht — bitte APS-Server neu starten. (URL: $url)", e)
+            }
+            return Exception("$msg (URL: $url)", e)
         }
         return e
     }

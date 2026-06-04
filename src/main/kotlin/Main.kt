@@ -43,11 +43,13 @@ fun main(args: Array<String>) {
 class DemoApp : JFrame("T2demo Custom URL App") {
     private val logger = LoggerFactory.getLogger(DemoApp::class.java)
     private val executor = Executors.newFixedThreadPool(2)
-    private val urlLabel = JLabel("Warte auf URL-Aufruf...")
-    private val protocolLabel = JLabel("-")
-    private val hostLabel = JLabel("-")
-    private val pathLabel = JLabel("-")
-    private val tableModel = DefaultTableModel(arrayOf("Parameter", "Wert"), 0)
+    private val urlLabel = JTextField("Warte auf URL-Aufruf...").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val protocolLabel = JTextField("-").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val hostLabel = JTextField("-").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val pathLabel = JTextField("-").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val tableModel = object : DefaultTableModel(arrayOf("Parameter", "Wert"), 0) {
+        override fun isCellEditable(row: Int, column: Int) = false
+    }
     private val table = JTable(tableModel)
 
     private var kontextId: String? = null
@@ -57,7 +59,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
 
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
-        setSize(800, 700)
+        setSize(950, 780)
         setLocationRelativeTo(null)
 
         val mainPanel = JPanel(BorderLayout(10, 10))
@@ -84,7 +86,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         detailsPanel.add(JLabel("Query Parameter:").apply { font = font.deriveFont(Font.BOLD) })
         detailsPanel.add(Box.createVerticalStrut(5))
         
-        table.isEnabled = false
+        table.isEnabled = true
         val scrollPane = JScrollPane(table)
         scrollPane.preferredSize = java.awt.Dimension(700, 150)
         
@@ -97,7 +99,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         apiTestPanel.layout = BoxLayout(apiTestPanel, BoxLayout.Y_AXIS)
         apiTestPanel.border = BorderFactory.createTitledBorder("API-Tests")
         
-        val buttonPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT))
+        val buttonPanel = JPanel(java.awt.GridLayout(0, 4, 6, 6))
         
         val btnSearchPatient = JButton("Patient (Kontext) suchen")
         btnSearchPatient.addActionListener { testSearchPatient() }
@@ -571,7 +573,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         }
     }
 
-    private fun createDetailRow(label: String, valueLabel: JLabel): JPanel {
+    private fun createDetailRow(label: String, valueLabel: JComponent): JPanel {
         val panel = JPanel(BorderLayout(5, 5))
         panel.alignmentX = LEFT_ALIGNMENT
         val l = JLabel(label)
@@ -582,7 +584,8 @@ class DemoApp : JFrame("T2demo Custom URL App") {
     }
 
     fun handleUrl(url: String) {
-        urlLabel.text = "<html><body style='width: 500px'>$url</body></html>"
+        urlLabel.text = url
+        urlLabel.caretPosition = 0
         tableModel.rowCount = 0
 
         try {
