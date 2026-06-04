@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-06-03**
+Stand: **2026-06-04**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -278,6 +278,8 @@ Implementierungsnahe Besonderheiten:
 | `GET /Patient?family=...&given=...&birthdate=...` ohne Parameter | Suchservice wird mit leeren Spezifikationen aufgerufen; die Antwort ist eine Suchmenge. |
 | `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang\|1.0.0` | Validierungsfehler, wenn `description`, `attachment.data` oder `attachment.contentType` fehlen. |
 | `GET /Organization/{id}/Practitioner` | Endpoint ist registriert, der aktuelle Handler interpretiert `{id}` aber als Practitioner-/Arztrollen-ID und gibt `Organization`-Ressourcen zurück. Für Drittanbieter ist `GET /Organization?practitioner=<id>` die fachlich klarere Variante. |
+| `PUT /Patient/{id}` vs. `PUT /Patient/{id}/_history/{version}` | Der Versionskonflikt-Check (→ 409) wird ausschließlich durch die URL-Form ausgelöst. `PUT /Patient/{id}` überspringt den Check; `PUT /Patient/{id}/_history/{version}` löst ihn aus. Clients sollten daher immer die versionslose URL verwenden, sofern kein bewusster Versionsschutz gewünscht ist. |
+| `meta.versionId` im Patient-Response | Der Server liefert `meta.versionId` als vollen Pfad (`{id}/_history/{version}`), nicht als kurze Versionsnummer. Dieser Wert ist nicht direkt als `If-Match`-Header verwendbar. |
 | Warnungen | Ohne `X-TreatWarningAsError: false` werden Warnungen als Fehler behandelt. |
 | Demo-Content-Type | Demo sendet XML-Content-Type; JSON-Beispiele müssen JSON-Content-Type setzen. |
 
@@ -352,6 +354,40 @@ Beispiel:
 ### 9.3 Verhalten bei leeren Kontaktdaten
 
 Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-Ressource kein `telecom`-Array.
+
+### 9.4 Geschlecht (gender)
+
+Einfache FHIR-Werte (`male`, `female`, `unknown`) werden direkt in `Patient.gender` übertragen. Die deutschen Werte **divers** und **unbestimmt** erfordern zusätzlich die Extension `gender-amtlich-de` auf dem `gender`-Element:
+
+| APS-Wert | `gender` | Extension Code |
+| --- | --- | --- |
+| männlich | `male` | — |
+| weiblich | `female` | — |
+| divers | `other` | `D` |
+| unbestimmt | `other` | `X` |
+| unbekannt | `unknown` | — |
+
+Die Extension wird als `valueCoding` auf dem primitiven `gender`-Element kodiert (nicht auf der Patient-Ressource selbst):
+
+```json
+{
+  "resourceType": "Patient",
+  "gender": "other",
+  "_gender": {
+    "extension": [
+      {
+        "url": "http://fhir.de/StructureDefinition/gender-amtlich-de",
+        "valueCoding": {
+          "system": "http://fhir.de/CodeSystem/gender-amtlich-de",
+          "code": "D"
+        }
+      }
+    ]
+  }
+}
+```
+
+Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 
 ## 10. Sicherheits- und Betriebsaspekte
 
@@ -507,7 +543,94 @@ X-FHIR-Profile: https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0
 }
 ```
 
-#### 1.4 Observation anlegen (Befund)
+#### 1.4 Patient anlegen
+
+**Request**
+
+```http
+POST https://<HOST>/aps/fhir/api/r4/Patient
+Content-Type: application/fhir+json
+Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+X-API-Key: <API_KEY>
+
+{
+  "resourceType": "Patient",
+  "meta": {
+    "profile": [
+      "https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0"
+    ]
+  },
+  "identifier": [
+    {
+      "system": "https://fhir.t2med.de/identifier/kontext",
+      "value": "<KONTEXT_ID>"
+    }
+  ],
+  "name": [
+    {
+      "family": "Mustermann",
+      "given": ["Max"]
+    }
+  ],
+  "birthDate": "1980-04-12",
+  "gender": "male"
+}
+```
+
+**Response**: analog 1.6 (`201` + `OperationOutcome`).
+
+#### 1.5 Patient aktualisieren
+
+**Request** — versionslose URL verwenden (kein `/_history/`), um unbeabsichtigte 409-Fehler zu vermeiden:
+
+```http
+PUT https://<HOST>/aps/fhir/api/r4/Patient/<PATIENT_OBJECT_ID>
+Content-Type: application/fhir+json
+Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+X-API-Key: <API_KEY>
+
+{
+  "resourceType": "Patient",
+  "id": "<PATIENT_OBJECT_ID>",
+  "meta": {
+    "profile": [
+      "https://fhir.t2med.de/StructureDefinition/FhirApiPatient|1.0.0"
+    ]
+  },
+  "name": [
+    {
+      "family": "Mustermann",
+      "given": ["Max"]
+    }
+  ],
+  "birthDate": "1980-04-12",
+  "gender": "other",
+  "_gender": {
+    "extension": [
+      {
+        "url": "http://fhir.de/StructureDefinition/gender-amtlich-de",
+        "valueCoding": {
+          "system": "http://fhir.de/CodeSystem/gender-amtlich-de",
+          "code": "D"
+        }
+      }
+    ]
+  },
+  "telecom": [
+    {
+      "system": "phone",
+      "value": "089 123456",
+      "use": "home"
+    }
+  ]
+}
+```
+
+**Response**: analog 1.7 (`201` + `OperationOutcome`).
+
+#### 1.6 Observation anlegen (Befund)
 
 **Request**
 
@@ -558,7 +681,7 @@ X-TreatWarningAsError: true
 }
 ```
 
-#### 1.5 Observation anlegen (Anamnese)
+#### 1.7 Observation anlegen (Anamnese)
 
 Wie 1.4, aber Profil:
 
@@ -566,7 +689,7 @@ Wie 1.4, aber Profil:
 https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese|1.0.0
 ```
 
-#### 1.6 Observation anlegen (Freitext)
+#### 1.8 Observation anlegen (Freitext)
 
 Wie 1.4, aber Profil:
 
@@ -587,7 +710,7 @@ Zusätzlich mögliche Extension:
 }
 ```
 
-#### 1.7 DocumentReference anlegen (Freitext)
+#### 1.9 DocumentReference anlegen (Freitext)
 
 **Request**
 
@@ -626,9 +749,9 @@ X-API-Key: <API_KEY>
 }
 ```
 
-**Response**: analog 1.4 (`201` + `OperationOutcome`).
+**Response**: analog 1.6 (`201` + `OperationOutcome`).
 
-#### 1.8 DocumentReference anlegen (Anhang)
+#### 1.10 DocumentReference anlegen (Anhang)
 
 **Request**
 
@@ -675,9 +798,9 @@ X-API-Key: <API_KEY>
 }
 ```
 
-**Response**: analog 1.4 (`201` + `OperationOutcome`).
+**Response**: analog 1.6 (`201` + `OperationOutcome`).
 
-#### 1.9 Procedure anlegen (Therapie)
+#### 1.11 Procedure anlegen (Therapie)
 
 Wie 1.4, aber Endpoint `POST /Procedure` und Profil:
 
@@ -691,7 +814,7 @@ Zeitpunkt-Reihenfolge in der Implementierung:
 2. Extension `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureOccurrence`
 3. `performedDateTime`
 
-#### 1.10 Procedure anlegen (Prozedere)
+#### 1.12 Procedure anlegen (Prozedere)
 
 Wie 1.9, aber Profil:
 
@@ -699,7 +822,7 @@ Wie 1.9, aber Profil:
 https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere|1.0.0
 ```
 
-#### 1.11 Condition anlegen (Diagnose)
+#### 1.13 Condition anlegen (Diagnose)
 
 **Request**
 
@@ -738,9 +861,9 @@ X-API-Key: <API_KEY>
 }
 ```
 
-**Response**: analog 1.4 (`201` + `OperationOutcome`).
+**Response**: analog 1.6 (`201` + `OperationOutcome`).
 
-#### 1.12 Transaction Bundle
+#### 1.14 Transaction Bundle
 
 **Request**
 
