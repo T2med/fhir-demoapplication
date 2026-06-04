@@ -447,6 +447,30 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
+    fun readOrganization(id: String): Organization {
+        try {
+            return client.read()
+                .resource(Organization::class.java)
+                .withId(id)
+                .withAdditionalHeader(FhirConstants.HEADER_X_FHIR_PROFILE, FhirConstants.PROFILE_ORGANIZATION)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "readOrganization")
+        }
+    }
+
+    fun readPractitioner(id: String): Practitioner {
+        try {
+            return client.read()
+                .resource(Practitioner::class.java)
+                .withId(id)
+                .withAdditionalHeader(FhirConstants.HEADER_X_FHIR_PROFILE, FhirConstants.PROFILE_PRACTITIONER)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "readPractitioner")
+        }
+    }
+
     fun readEncounter(kontextId: String): Encounter {
         try {
             return client.read()

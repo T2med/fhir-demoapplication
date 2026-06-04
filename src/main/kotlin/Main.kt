@@ -453,7 +453,52 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             try {
                 log("Lese Encounter für Kontext-ID $kontext...")
                 val encounter = service.readEncounter(kontext)
-                SwingUtilities.invokeLater { log("Encounter gelesen: ID=${encounter.idElement.idPart}, Status=${encounter.status}") }
+
+                val patientName = encounter.subject?.referenceElement?.idPart
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { id ->
+                        try {
+                            val p = service.readPatient(id)
+                            val n = p.nameFirstRep
+                            val geb = p.birthDateElement?.valueAsString ?: "-"
+                            "${n.family ?: "-"}, ${n.givenAsSingleString.ifBlank { "-" }} (Geb.: $geb)"
+                        } catch (e: Exception) {
+                            logger.warn("Patient-Referenz nicht auflösbar: {}", e.message)
+                            "nicht auflösbar"
+                        }
+                    } ?: "-"
+
+                val orgName = encounter.serviceProvider?.referenceElement?.idPart
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { id ->
+                        try { service.readOrganization(id).name ?: "-" } catch (e: Exception) {
+                            logger.warn("Organisation nicht auflösbar: {}", e.message)
+                            "nicht auflösbar"
+                        }
+                    } ?: "-"
+
+                val practitionerNames = encounter.participant
+                    .mapNotNull { it.individual?.referenceElement?.idPart?.takeIf { id -> id.isNotBlank() } }
+                    .map { id ->
+                        try {
+                            val pr = service.readPractitioner(id)
+                            val n = pr.nameFirstRep
+                            "${n.prefix.joinToString(" ") { p -> p.value }} ${n.family ?: "-"}, ${n.givenAsSingleString.ifBlank { "-" }}".trim()
+                        } catch (e: Exception) {
+                            logger.warn("Practitioner nicht auflösbar: {}", e.message)
+                            "nicht auflösbar"
+                        }
+                    }.ifEmpty { listOf("-") }
+
+                SwingUtilities.invokeLater {
+                    log("=== Encounter gelesen ===")
+                    log("ID:           ${encounter.idElement.idPart}")
+                    log("Status:       ${encounter.status}")
+                    log("Patient:      $patientName")
+                    log("Organisation: $orgName")
+                    practitionerNames.forEach { log("Arzt:         $it") }
+                    log("========================")
+                }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater { log("Fehler bei Encounter-Lesen: ${e.message}") }
                 logger.error("Fehler bei Encounter-Lesen", e)
