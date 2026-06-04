@@ -102,6 +102,10 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         val btnSearchPatient = JButton("Patient (Kontext) suchen")
         btnSearchPatient.addActionListener { testSearchPatient() }
         buttonPanel.add(btnSearchPatient)
+
+        val btnSearchPatientByName = JButton("Patient (Name) suchen")
+        btnSearchPatientByName.addActionListener { testSearchPatientByName() }
+        buttonPanel.add(btnSearchPatientByName)
         
         val btnCreateObs = JButton("Observation (Befund) anlegen")
         btnCreateObs.addActionListener { testCreateObservation() }
@@ -228,6 +232,38 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                 val errorMsg = e.message ?: "Unbekannter Fehler"
                 SwingUtilities.invokeLater { log("Fehler bei Patientensuche: $errorMsg") }
                 logger.error("Fehler bei Patientensuche", e)
+            }
+        }
+    }
+
+    private fun testSearchPatientByName() {
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val family = JOptionPane.showInputDialog(this, "Nachname:", "Patient suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+        val given = JOptionPane.showInputDialog(this, "Vorname (leer = beliebig):", "Patient suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+        val birthdate = JOptionPane.showInputDialog(this, "Geburtsdatum (YYYY-MM-DD, leer = beliebig):", "Patient suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+
+        executor.execute {
+            try {
+                log("Suche Patient: Nachname=\"$family\", Vorname=\"$given\", Geburtsdatum=\"$birthdate\"...")
+                val bundle = service.searchPatientByName(family, given, birthdate)
+                SwingUtilities.invokeLater {
+                    log("${bundle.total} Treffer gefunden.")
+                    bundle.entry.take(5).forEach { e ->
+                        val p = e.resource as? org.hl7.fhir.r4.model.Patient
+                        if (p != null) {
+                            val name = p.nameFirstRep
+                            val geb = p.birthDateElement?.valueAsString ?: "-"
+                            log(" - ${name.family ?: "-"}, ${name.givenAsSingleString.ifBlank { "-" }} | Geb.: $geb | ID: ${p.idElement.idPart}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Patientensuche: ${e.message}") }
+                logger.error("Fehler bei Patientensuche (Name)", e)
             }
         }
     }
