@@ -1,4 +1,5 @@
 import ca.uhn.fhir.context.FhirContext
+import ca.uhn.fhir.model.api.annotation.ResourceDef
 import ca.uhn.fhir.rest.client.api.IClientInterceptor
 import ca.uhn.fhir.rest.client.api.IHttpRequest
 import ca.uhn.fhir.rest.client.api.IHttpResponse
@@ -13,6 +14,44 @@ import java.util.*
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 import constants.FhirConstants
+
+/** Neuer Telecom-Eintrag (Telefon, Fax oder Email) für Patient-Update. */
+data class TelecomEntry(
+    val system: ContactPoint.ContactPointSystem,
+    val use: ContactPoint.ContactPointUse?,
+    val value: String
+)
+
+/**
+ * Die fünf deutschen Geschlechtswerte.
+ * DIVERS ("D") und UNBESTIMMT ("X") erfordern eine FHIR-Extension auf dem genderElement;
+ * ohne Extension würde der APS-Server `other` als UNBEKANNT interpretieren.
+ */
+enum class Geschlecht(
+    val fhirGender: Enumerations.AdministrativeGender,
+    val amtlichCode: String?   // null = keine Extension nötig
+) {
+    MAENNLICH(Enumerations.AdministrativeGender.MALE,    null),
+    WEIBLICH (Enumerations.AdministrativeGender.FEMALE,  null),
+    DIVERS   (Enumerations.AdministrativeGender.OTHER,   "D"),
+    UNBESTIMMT(Enumerations.AdministrativeGender.OTHER,  "X"),
+    UNBEKANNT(Enumerations.AdministrativeGender.UNKNOWN, null)
+}
+
+/** Felder, die beim Patient-Update gesetzt werden sollen. */
+data class PatientUpdateData(
+    val nachname: String,
+    val vorname: String,
+    val geburtsdatum: String,    // YYYY-MM-DD, leer = unverändert
+    val geschlecht: Geschlecht?,
+    val neuesTelecom: TelecomEntry?
+)
+
+/** Lokale Custom-Resource-Klasse analog zu APS FhirApiBefund (erweitert Observation, Ressourcenname "Befund"). */
+@ResourceDef(name = "Befund", profile = FhirConstants.PROFILE_BEFUND)
+class FhirApiBefund : Observation() {
+    override fun fhirType(): String = "Befund"
+}
 
 class FhirService(private val baseUrl: String, private val apiKey: String, private val oAuthToken : String, private val providedCtx: FhirContext? = null) {
     private val logger = LoggerFactory.getLogger(FhirService::class.java)
@@ -336,12 +375,163 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
+    fun createPatient(kontextId: String): OperationOutcome {
+        try {
+            val patient = Patient()
+            setProfile(patient, FhirConstants.PROFILE_PATIENT)
+            addKontextIdentifier(patient, kontextId)
+
+            val name = patient.addName()
+            name.family = "Mustermann"
+            name.addGiven("Max")
+
+            patient.birthDateElement = DateType("1980-04-12")
+            patient.gender = Enumerations.AdministrativeGender.MALE
+
+            val result = client.create()
+                .resource(patient)
+                .execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "createPatient")
+        }
+    }
+
+    fun updatePatient(patientId: String, data: PatientUpdateData): OperationOutcome {
+        try {
+            val patient = readPatient(patientId)
+
+            // Namensdaten überschreiben
+            patient.name.clear()
+            val name = patient.addName()
+            name.family = data.nachname
+            if (data.vorname.isNotBlank()) name.addGiven(data.vorname)
+
+            // Geburtsdatum setzen (wenn angegeben)
+            if (data.geburtsdatum.isNotBlank()) {
+                patient.birthDateElement = DateType(data.geburtsdatum)
+            }
+
+            // Geschlecht setzen (wenn ausgewählt)
+            // DIVERS und UNBESTIMMT benötigen zusätzlich die Extension gender-amtlich-de,
+            // damit der APS-Server sie von UNBEKANNT unterscheiden kann.
+            data.geschlecht?.let { g ->
+                patient.gender = g.fhirGender
+                if (g.amtlichCode != null) {
+                    patient.genderElement.addExtension(
+                        Extension(
+                            "http://fhir.de/StructureDefinition/gender-amtlich-de",
+                            Coding("http://fhir.de/CodeSystem/gender-amtlich-de", g.amtlichCode, null)
+                        )
+                    )
+                }
+            }
+
+            // Neuen Telecom-Eintrag anhängen (wenn angegeben)
+            data.neuesTelecom?.let { tc ->
+                patient.addTelecom().apply {
+                    system = tc.system
+                    use = tc.use
+                    value = tc.value
+                }
+            }
+
+            // Version aus der ID entfernen: PUT /Patient/{id} statt /_history/{version}
+            // Der APS-Server löst bei /_history/-URL einen Versionskonflikt-Check aus (409),
+            // ohne Version-Suffix wird dieser Check übersprungen.
+            patient.setId(patient.idElement.toUnqualifiedVersionless())
+            val result = client.update().resource(patient).execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "updatePatient")
+        }
+    }
+
+    fun readOrganization(id: String): Organization {
+        try {
+            return client.read()
+                .resource(Organization::class.java)
+                .withId(id)
+                .withAdditionalHeader(FhirConstants.HEADER_X_FHIR_PROFILE, FhirConstants.PROFILE_ORGANIZATION)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "readOrganization")
+        }
+    }
+
+    fun readPractitioner(id: String): Practitioner {
+        try {
+            return client.read()
+                .resource(Practitioner::class.java)
+                .withId(id)
+                .withAdditionalHeader(FhirConstants.HEADER_X_FHIR_PROFILE, FhirConstants.PROFILE_PRACTITIONER)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "readPractitioner")
+        }
+    }
+
+    fun readEncounter(kontextId: String): Encounter {
+        try {
+            return client.read()
+                .resource(Encounter::class.java)
+                .withId(kontextId)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "readEncounter")
+        }
+    }
+
+    fun searchOrganization(name: String): Bundle {
+        try {
+            return client.search<Bundle>()
+                .forResource(Organization::class.java)
+                .where(Organization.NAME.matches().value(name))
+                .returnBundle(Bundle::class.java)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "searchOrganization")
+        }
+    }
+
+    fun searchPractitioner(name: String): Bundle {
+        try {
+            return client.search<Bundle>()
+                .forResource(Practitioner::class.java)
+                .where(Practitioner.FAMILY.matches().value(name))
+                .returnBundle(Bundle::class.java)
+                .execute()
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "searchPractitioner")
+        }
+    }
+
+    fun createBefund(kontextId: String, value: String): OperationOutcome {
+        try {
+            val befund = FhirApiBefund()
+            addKontextIdentifier(befund, kontextId)
+            befund.status = Observation.ObservationStatus.FINAL
+            befund.effective = DateTimeType(Date())
+            befund.value = StringType(value)
+
+            val result = client.create()
+                .resource(befund)
+                .execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "createBefund")
+        }
+    }
+
     private fun wrapExceptionWithUrl(e: Exception, methodName: String): Exception {
         val url = lastUrlInterceptor.lastUrl ?: baseUrl
         println("[DEBUG] Fehler bei $methodName - URL war: $url")
         if (e is ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException) {
-            // Bei FHIR-Server-Fehlern (404 etc.) die URL in die Nachricht einbauen
-            return Exception("${e.message} (URL: $url)", e)
+            val msg = e.message ?: ""
+            if (e.statusCode == 403 && msg.contains("fehlt oder ist ungültig")) {
+                return Exception("Demo-API-Key-Limit erreicht — bitte APS-Server neu starten. (URL: $url)", e)
+            }
+            return Exception("$msg (URL: $url)", e)
         }
         return e
     }

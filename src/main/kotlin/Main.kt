@@ -43,11 +43,13 @@ fun main(args: Array<String>) {
 class DemoApp : JFrame("T2demo Custom URL App") {
     private val logger = LoggerFactory.getLogger(DemoApp::class.java)
     private val executor = Executors.newFixedThreadPool(2)
-    private val urlLabel = JLabel("Warte auf URL-Aufruf...")
-    private val protocolLabel = JLabel("-")
-    private val hostLabel = JLabel("-")
-    private val pathLabel = JLabel("-")
-    private val tableModel = DefaultTableModel(arrayOf("Parameter", "Wert"), 0)
+    private val urlLabel = JTextField("Warte auf URL-Aufruf...").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val protocolLabel = JTextField("-").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val hostLabel = JTextField("-").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val pathLabel = JTextField("-").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val tableModel = object : DefaultTableModel(arrayOf("Parameter", "Wert"), 0) {
+        override fun isCellEditable(row: Int, column: Int) = false
+    }
     private val table = JTable(tableModel)
 
     private var kontextId: String? = null
@@ -57,7 +59,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
 
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
-        setSize(800, 700)
+        setSize(950, 780)
         setLocationRelativeTo(null)
 
         val mainPanel = JPanel(BorderLayout(10, 10))
@@ -84,7 +86,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         detailsPanel.add(JLabel("Query Parameter:").apply { font = font.deriveFont(Font.BOLD) })
         detailsPanel.add(Box.createVerticalStrut(5))
         
-        table.isEnabled = false
+        table.isEnabled = true
         val scrollPane = JScrollPane(table)
         scrollPane.preferredSize = java.awt.Dimension(700, 150)
         
@@ -97,11 +99,15 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         apiTestPanel.layout = BoxLayout(apiTestPanel, BoxLayout.Y_AXIS)
         apiTestPanel.border = BorderFactory.createTitledBorder("API-Tests")
         
-        val buttonPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT))
+        val buttonPanel = JPanel(java.awt.GridLayout(0, 4, 6, 6))
         
         val btnSearchPatient = JButton("Patient (Kontext) suchen")
         btnSearchPatient.addActionListener { testSearchPatient() }
         buttonPanel.add(btnSearchPatient)
+
+        val btnSearchPatientByName = JButton("Patient (Name) suchen")
+        btnSearchPatientByName.addActionListener { testSearchPatientByName() }
+        buttonPanel.add(btnSearchPatientByName)
         
         val btnCreateObs = JButton("Observation (Befund) anlegen")
         btnCreateObs.addActionListener { testCreateObservation() }
@@ -126,6 +132,30 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         val btnTransaction = JButton("Transaktion (Obs+Cond)")
         btnTransaction.addActionListener { testTransaction() }
         buttonPanel.add(btnTransaction)
+
+        val btnCreatePatient = JButton("Patient anlegen")
+        btnCreatePatient.addActionListener { testCreatePatient() }
+        buttonPanel.add(btnCreatePatient)
+
+        val btnUpdatePatient = JButton("Patient aktualisieren")
+        btnUpdatePatient.addActionListener { testUpdatePatient() }
+        buttonPanel.add(btnUpdatePatient)
+
+        val btnReadEncounter = JButton("Encounter lesen")
+        btnReadEncounter.addActionListener { testReadEncounter() }
+        buttonPanel.add(btnReadEncounter)
+
+        val btnSearchOrg = JButton("Organisation suchen")
+        btnSearchOrg.addActionListener { testSearchOrganization() }
+        buttonPanel.add(btnSearchOrg)
+
+        val btnSearchPract = JButton("Practitioner suchen")
+        btnSearchPract.addActionListener { testSearchPractitioner() }
+        buttonPanel.add(btnSearchPract)
+
+        val btnCreateBefund = JButton("Befund anlegen")
+        btnCreateBefund.addActionListener { testCreateBefund() }
+        buttonPanel.add(btnCreateBefund)
         
         apiTestPanel.add(buttonPanel)
         
@@ -167,7 +197,35 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                 val patient = service.searchPatientByKontext(kontext)
                 SwingUtilities.invokeLater {
                     if (patient != null) {
-                        log("Patient gefunden: ID=${patient.idElement.idPart}")
+                        log("=== Patient gefunden ===")
+                        log("ID:          ${patient.idElement.idPart}")
+                        log("Version:     ${patient.meta?.versionId ?: "-"}")
+                        val name = patient.nameFirstRep
+                        log("Name:        ${name.family ?: "-"}, ${name.givenAsSingleString.ifBlank { "-" }}")
+                        log("Geburtsdatum:${patient.birthDateElement?.valueAsString ?: "-"}")
+                        log("Geschlecht:  ${patient.gender?.display ?: "-"}")
+                        patient.address.forEach { adr ->
+                            val typ = adr.type?.display ?: adr.use?.display ?: "Adresse"
+                            val strasse = adr.line.joinToString(" ") { it.value }
+                            log("$typ:    ${strasse.ifBlank { "-" }}, ${adr.postalCode ?: ""} ${adr.city ?: ""} ${adr.country ?: ""}".trimEnd())
+                        }
+                        if (patient.telecom.isEmpty()) {
+                            log("Telefon/Email: (keine Einträge)")
+                        } else {
+                            patient.telecom.forEach { tc ->
+                                val system = tc.system?.display ?: "?"
+                                val use = tc.use?.display?.let { " ($it)" } ?: ""
+                                val kommentar = tc.getExtensionByUrl("https://fhir.t2med.de/StructureDefinition/FhirApiKontaktinformationKommentar")
+                                    ?.value?.primitiveValue()?.let { " [Kommentar: $it]" } ?: ""
+                                val kategorie = tc.getExtensionByUrl("https://fhir.t2med.de/StructureDefinition/FhirApiTelefonnummerKategorie")
+                                    ?.value?.primitiveValue()?.let { " [Kategorie: $it]" } ?: ""
+                                log("$system$use: ${tc.value ?: "-"}$kategorie$kommentar")
+                            }
+                        }
+                        patient.identifier.forEach { id ->
+                            log("Identifier:  system=${id.system ?: "-"}, value=${id.value ?: "-"}")
+                        }
+                        log("========================")
                     } else {
                         log("Kein Patient für diesen Kontext gefunden.")
                     }
@@ -176,6 +234,38 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                 val errorMsg = e.message ?: "Unbekannter Fehler"
                 SwingUtilities.invokeLater { log("Fehler bei Patientensuche: $errorMsg") }
                 logger.error("Fehler bei Patientensuche", e)
+            }
+        }
+    }
+
+    private fun testSearchPatientByName() {
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val family = JOptionPane.showInputDialog(this, "Nachname:", "Patient suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+        val given = JOptionPane.showInputDialog(this, "Vorname (leer = beliebig):", "Patient suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+        val birthdate = JOptionPane.showInputDialog(this, "Geburtsdatum (YYYY-MM-DD, leer = beliebig):", "Patient suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+
+        executor.execute {
+            try {
+                log("Suche Patient: Nachname=\"$family\", Vorname=\"$given\", Geburtsdatum=\"$birthdate\"...")
+                val bundle = service.searchPatientByName(family, given, birthdate)
+                SwingUtilities.invokeLater {
+                    log("${bundle.total} Treffer gefunden.")
+                    bundle.entry.take(5).forEach { e ->
+                        val p = e.resource as? org.hl7.fhir.r4.model.Patient
+                        if (p != null) {
+                            val name = p.nameFirstRep
+                            val geb = p.birthDateElement?.valueAsString ?: "-"
+                            log(" - ${name.family ?: "-"}, ${name.givenAsSingleString.ifBlank { "-" }} | Geb.: $geb | ID: ${p.idElement.idPart}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Patientensuche: ${e.message}") }
+                logger.error("Fehler bei Patientensuche (Name)", e)
             }
         }
     }
@@ -307,7 +397,183 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         }
     }
 
-    private fun createDetailRow(label: String, valueLabel: JLabel): JPanel {
+    private fun testCreatePatient() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Lege Patient (Max Mustermann, 1980-04-12) an...")
+                val outcome = service.createPatient(kontext)
+                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Patient-Erstellung: ${e.message}") }
+                logger.error("Fehler bei Patient-Erstellung", e)
+            }
+        }
+    }
+
+    private fun testUpdatePatient() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Suche Patient für Kontext $kontext (für Update)...")
+                val patient = service.searchPatientByKontext(kontext)
+                if (patient == null) {
+                    SwingUtilities.invokeLater { log("Kein Patient gefunden — Update nicht möglich.") }
+                    return@execute
+                }
+                val patientId = patient.idElement.idPart
+                log("Patient gefunden: ID=$patientId — öffne Update-Dialog...")
+
+                val dialogRef = java.util.concurrent.atomic.AtomicReference<PatientUpdateDialog>()
+                SwingUtilities.invokeAndWait {
+                    val dlg = PatientUpdateDialog(this@DemoApp, patient)
+                    dialogRef.set(dlg)
+                    dlg.isVisible = true
+                }
+                val updateData = dialogRef.get().result ?: run {
+                    SwingUtilities.invokeLater { log("Update abgebrochen.") }
+                    return@execute
+                }
+                val outcome = service.updatePatient(patientId, updateData)
+                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Patient-Update: ${e.message}") }
+                logger.error("Fehler bei Patient-Update", e)
+            }
+        }
+    }
+
+    private fun testReadEncounter() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Lese Encounter für Kontext-ID $kontext...")
+                val encounter = service.readEncounter(kontext)
+
+                val patientName = encounter.subject?.referenceElement?.idPart
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { id ->
+                        try {
+                            val p = service.readPatient(id)
+                            val n = p.nameFirstRep
+                            val geb = p.birthDateElement?.valueAsString ?: "-"
+                            "${n.family ?: "-"}, ${n.givenAsSingleString.ifBlank { "-" }} (Geb.: $geb)"
+                        } catch (e: Exception) {
+                            logger.warn("Patient-Referenz nicht auflösbar: {}", e.message)
+                            "nicht auflösbar"
+                        }
+                    } ?: "-"
+
+                val orgName = encounter.serviceProvider?.referenceElement?.idPart
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { id ->
+                        try { service.readOrganization(id).name ?: "-" } catch (e: Exception) {
+                            logger.warn("Organisation nicht auflösbar: {}", e.message)
+                            "nicht auflösbar"
+                        }
+                    } ?: "-"
+
+                val practitionerNames = encounter.participant
+                    .mapNotNull { it.individual?.referenceElement?.idPart?.takeIf { id -> id.isNotBlank() } }
+                    .map { id ->
+                        try {
+                            val pr = service.readPractitioner(id)
+                            val n = pr.nameFirstRep
+                            "${n.prefix.joinToString(" ") { p -> p.value }} ${n.family ?: "-"}, ${n.givenAsSingleString.ifBlank { "-" }}".trim()
+                        } catch (e: Exception) {
+                            logger.warn("Practitioner nicht auflösbar: {}", e.message)
+                            "nicht auflösbar"
+                        }
+                    }.ifEmpty { listOf("-") }
+
+                SwingUtilities.invokeLater {
+                    log("=== Encounter gelesen ===")
+                    log("ID:           ${encounter.idElement.idPart}")
+                    log("Status:       ${encounter.status}")
+                    log("Patient:      $patientName")
+                    log("Organisation: $orgName")
+                    practitionerNames.forEach { log("Arzt:         $it") }
+                    log("========================")
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Encounter-Lesen: ${e.message}") }
+                logger.error("Fehler bei Encounter-Lesen", e)
+            }
+        }
+    }
+
+    private fun testSearchOrganization() {
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val name = JOptionPane.showInputDialog(this, "Organisationsname (leer = alle):", "Organisation suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+
+        executor.execute {
+            try {
+                log("Suche Organisation: \"$name\"...")
+                val bundle = service.searchOrganization(name)
+                SwingUtilities.invokeLater {
+                    log("${bundle.total} Treffer gefunden.")
+                    bundle.entry.take(5).forEach { e ->
+                        val org = e.resource as? org.hl7.fhir.r4.model.Organization
+                        log(" - ${org?.name ?: org?.idElement?.idPart ?: "?"}")
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Organisations-Suche: ${e.message}") }
+                logger.error("Fehler bei Organisations-Suche", e)
+            }
+        }
+    }
+
+    private fun testSearchPractitioner() {
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        val name = JOptionPane.showInputDialog(this, "Nachname (leer = alle):", "Practitioner suchen", JOptionPane.QUESTION_MESSAGE)
+            ?: return
+
+        executor.execute {
+            try {
+                log("Suche Practitioner: \"$name\"...")
+                val bundle = service.searchPractitioner(name)
+                SwingUtilities.invokeLater {
+                    log("${bundle.total} Treffer gefunden.")
+                    bundle.entry.take(5).forEach { e ->
+                        val pract = e.resource as? org.hl7.fhir.r4.model.Practitioner
+                        val famName = pract?.nameFirstRep?.family ?: pract?.idElement?.idPart ?: "?"
+                        log(" - $famName")
+                    }
+                }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Practitioner-Suche: ${e.message}") }
+                logger.error("Fehler bei Practitioner-Suche", e)
+            }
+        }
+    }
+
+    private fun testCreateBefund() {
+        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
+        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
+
+        executor.execute {
+            try {
+                log("Lege Befund an...")
+                val outcome = service.createBefund(kontext, "Test-Befund via Demoapp")
+                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
+            } catch (e: Exception) {
+                SwingUtilities.invokeLater { log("Fehler bei Befund-Erstellung: ${e.message}") }
+                logger.error("Fehler bei Befund-Erstellung", e)
+            }
+        }
+    }
+
+    private fun createDetailRow(label: String, valueLabel: JComponent): JPanel {
         val panel = JPanel(BorderLayout(5, 5))
         panel.alignmentX = LEFT_ALIGNMENT
         val l = JLabel(label)
@@ -318,7 +584,8 @@ class DemoApp : JFrame("T2demo Custom URL App") {
     }
 
     fun handleUrl(url: String) {
-        urlLabel.text = "<html><body style='width: 500px'>$url</body></html>"
+        urlLabel.text = url
+        urlLabel.caretPosition = 0
         tableModel.rowCount = 0
 
         try {
@@ -359,5 +626,154 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         }
 
         toFront()
+    }
+}
+
+/**
+ * Dialog zum Bearbeiten von Patientendaten.
+ * Felder werden aus der übergebenen Patient-Ressource vorausgefüllt.
+ * Nach Klick auf "Aktualisieren" steht das Ergebnis in [result].
+ */
+class PatientUpdateDialog(parent: JFrame, patient: org.hl7.fhir.r4.model.Patient) :
+    JDialog(parent, "Patient aktualisieren", true) {
+
+    var result: PatientUpdateData? = null
+        private set
+
+    init {
+        defaultCloseOperation = DISPOSE_ON_CLOSE
+        layout = java.awt.BorderLayout(10, 10)
+        val panel = JPanel(java.awt.GridBagLayout())
+        panel.border = BorderFactory.createEmptyBorder(12, 12, 4, 12)
+        val gbc = java.awt.GridBagConstraints().apply {
+            insets = java.awt.Insets(4, 4, 4, 4)
+            anchor = java.awt.GridBagConstraints.WEST
+        }
+
+        fun label(row: Int, text: String) {
+            gbc.gridx = 0; gbc.gridy = row; gbc.fill = java.awt.GridBagConstraints.NONE
+            panel.add(JLabel(text), gbc)
+        }
+        fun field(row: Int, comp: JComponent) {
+            gbc.gridx = 1; gbc.gridy = row; gbc.fill = java.awt.GridBagConstraints.HORIZONTAL
+            gbc.weightx = 1.0
+            panel.add(comp, gbc)
+            gbc.weightx = 0.0
+        }
+
+        // ── Stammdaten ──────────────────────────────────────────────────────
+        val tfNachname = JTextField(patient.nameFirstRep.family ?: "", 20)
+        val tfVorname  = JTextField(patient.nameFirstRep.givenAsSingleString, 20)
+        val tfGeburt   = JTextField(patient.birthDateElement?.valueAsString ?: "", 12)
+
+        val geschlechtItems = arrayOf("-", "Männlich", "Weiblich", "Divers", "Unbestimmt", "Unbekannt")
+        val cbGeschlecht = JComboBox(geschlechtItems)
+        // OTHER ausdifferenzieren: Amtlich-Extension auf genderElement prüfen (Code "D" = divers, "X" = unbestimmt)
+        val amtlichCode = patient.genderElement
+            ?.getExtensionByUrl("http://fhir.de/StructureDefinition/gender-amtlich-de")
+            ?.value?.let { (it as? Coding)?.code ?: it.primitiveValue() }
+        when {
+            patient.gender == Enumerations.AdministrativeGender.MALE    -> cbGeschlecht.selectedItem = "Männlich"
+            patient.gender == Enumerations.AdministrativeGender.FEMALE  -> cbGeschlecht.selectedItem = "Weiblich"
+            patient.gender == Enumerations.AdministrativeGender.UNKNOWN -> cbGeschlecht.selectedItem = "Unbekannt"
+            patient.gender == Enumerations.AdministrativeGender.OTHER && amtlichCode == "X" -> cbGeschlecht.selectedItem = "Unbestimmt"
+            patient.gender == Enumerations.AdministrativeGender.OTHER   -> cbGeschlecht.selectedItem = "Divers"
+            else -> cbGeschlecht.selectedItem = "-"
+        }
+
+        label(0, "Nachname:"); field(0, tfNachname)
+        label(1, "Vorname:");  field(1, tfVorname)
+        label(2, "Geburtsdatum (YYYY-MM-DD):"); field(2, tfGeburt)
+        label(3, "Geschlecht:"); field(3, cbGeschlecht)
+
+        // ── Vorhandene Kontaktdaten (read-only) ──────────────────────────────
+        gbc.gridx = 0; gbc.gridy = 4; gbc.gridwidth = 2; gbc.fill = java.awt.GridBagConstraints.NONE
+        panel.add(JLabel("Vorhandene Kontaktdaten:"), gbc)
+        gbc.gridwidth = 1
+
+        val existingText = if (patient.telecom.isEmpty()) "(keine)" else
+            patient.telecom.joinToString("\n") { tc ->
+                val sys = tc.system?.display ?: "?"
+                val use = tc.use?.display?.let { " ($it)" } ?: ""
+                "$sys$use: ${tc.value ?: "-"}"
+            }
+        val taExisting = JTextArea(existingText, 3, 30).apply {
+            isEditable = false
+            background = UIManager.getColor("Panel.background")
+            lineWrap = true; wrapStyleWord = true
+        }
+        gbc.gridx = 0; gbc.gridy = 5; gbc.gridwidth = 2
+        gbc.fill = java.awt.GridBagConstraints.BOTH; gbc.weighty = 0.3
+        panel.add(JScrollPane(taExisting), gbc)
+        gbc.gridwidth = 1; gbc.weighty = 0.0
+
+        // ── Neuen Kontakt hinzufügen ─────────────────────────────────────────
+        gbc.gridx = 0; gbc.gridy = 6; gbc.gridwidth = 2; gbc.fill = java.awt.GridBagConstraints.NONE
+        panel.add(JLabel("Neuen Kontakt hinzufügen:"), gbc)
+        gbc.gridwidth = 1
+
+        val cbTcTyp = JComboBox(arrayOf("(keiner)", "Telefon", "Fax", "Email"))
+        val cbTcUse = JComboBox(arrayOf("-", "Privat", "Geschäftlich", "Mobil"))
+        val tfTcWert = JTextField(20)
+
+        label(7, "Typ:"); field(7, cbTcTyp)
+        label(8, "Verwendung:"); field(8, cbTcUse)
+        label(9, "Wert:"); field(9, tfTcWert)
+
+        add(panel, java.awt.BorderLayout.CENTER)
+
+        // ── Buttons ──────────────────────────────────────────────────────────
+        val btnCancel = JButton("Abbrechen")
+        val btnOk     = JButton("Aktualisieren")
+        btnOk.isDefaultCapable = true
+        getRootPane().defaultButton = btnOk
+
+        btnCancel.addActionListener { dispose() }
+        btnOk.addActionListener {
+            val tcTypStr = cbTcTyp.selectedItem as String
+            val tcSystem = when (tcTypStr) {
+                "Telefon" -> ContactPoint.ContactPointSystem.PHONE
+                "Fax"     -> ContactPoint.ContactPointSystem.FAX
+                "Email"   -> ContactPoint.ContactPointSystem.EMAIL
+                else      -> null
+            }
+            val tcUseStr = cbTcUse.selectedItem as String
+            val tcUse = when (tcUseStr) {
+                "Privat"       -> ContactPoint.ContactPointUse.HOME
+                "Geschäftlich" -> ContactPoint.ContactPointUse.WORK
+                "Mobil"        -> ContactPoint.ContactPointUse.MOBILE
+                else           -> null
+            }
+            val tcWert = tfTcWert.text.trim()
+            val neuesTelecom = if (tcSystem != null && tcWert.isNotBlank())
+                TelecomEntry(tcSystem, tcUse, tcWert) else null
+
+            val geschlecht = when (cbGeschlecht.selectedItem as String) {
+                "Männlich"   -> Geschlecht.MAENNLICH
+                "Weiblich"   -> Geschlecht.WEIBLICH
+                "Divers"     -> Geschlecht.DIVERS
+                "Unbestimmt" -> Geschlecht.UNBESTIMMT
+                "Unbekannt"  -> Geschlecht.UNBEKANNT
+                else         -> null
+            }
+
+            result = PatientUpdateData(
+                nachname      = tfNachname.text.trim(),
+                vorname       = tfVorname.text.trim(),
+                geburtsdatum  = tfGeburt.text.trim(),
+                geschlecht    = geschlecht,
+                neuesTelecom  = neuesTelecom
+            )
+            dispose()
+        }
+
+        val btnPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT))
+        btnPanel.border = BorderFactory.createEmptyBorder(0, 12, 8, 12)
+        btnPanel.add(btnCancel)
+        btnPanel.add(btnOk)
+        add(btnPanel, java.awt.BorderLayout.SOUTH)
+
+        pack()
+        setLocationRelativeTo(parent)
     }
 }
