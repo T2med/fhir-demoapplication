@@ -208,3 +208,9 @@ Für API-Semantik, Fehlercodes, Headerregeln, Profile und Beispielpayloads ist d
 ## Lizenz
 
 Dieses Projekt ist unter der Apache License 2.0 lizenziert. Copyright 2026 T2med GmbH & Co. KG.
+
+## Rechtliche Hinweise
+
+Informationen zum Datenschutz finden Sie auf der [T2med-Datenschutzseite](https://www.t2med.de/datenschutz).
+
+FHIR® ist eine eingetragene Marke von Health Level Seven International (HL7) und wird mit Genehmigung von HL7 verwendet. Die Verwendung dieser Marke stellt keine Billigung oder Zertifizierung durch HL7 dar.
