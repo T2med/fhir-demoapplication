@@ -200,9 +200,10 @@ class FhirServiceTest {
 
     @Test
     fun `test updatePatient sets versionId in idElement for optimistic locking`() {
+        // meta.versionId liefert laut Leitfaden den vollen Pfad, nicht nur die kurze Nummer
         val patient = Patient().apply {
             id = "Patient/123"
-            meta = Meta().apply { versionId = "4" }
+            meta = Meta().apply { versionId = "123/_history/4" }
             addName().apply { family = "Muster"; addGiven("Max") }
         }
         val mockOutcome = OperationOutcome().apply {

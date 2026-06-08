@@ -278,8 +278,8 @@ Implementierungsnahe Besonderheiten:
 | `GET /Patient?family=...&given=...&birthdate=...` ohne Parameter | Suchservice wird mit leeren Spezifikationen aufgerufen; die Antwort ist eine Suchmenge. |
 | `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang\|1.0.0` | Validierungsfehler, wenn `description`, `attachment.data` oder `attachment.contentType` fehlen. |
 | `GET /Organization/{id}/Practitioner` | Endpoint ist registriert, der aktuelle Handler interpretiert `{id}` aber als Practitioner-/Arztrollen-ID und gibt `Organization`-Ressourcen zurück. Für Drittanbieter ist `GET /Organization?practitioner=<id>` die fachlich klarere Variante. |
-| `PUT /Patient/{id}` vs. `PUT /Patient/{id}/_history/{version}` | Der Versionskonflikt-Check (→ 409) wird ausschließlich durch die URL-Form ausgelöst. `PUT /Patient/{id}` überspringt den Check; `PUT /Patient/{id}/_history/{version}` löst ihn aus. Clients sollten daher immer die versionslose URL verwenden, sofern kein bewusster Versionsschutz gewünscht ist. |
-| `meta.versionId` im Patient-Response | Der Server liefert `meta.versionId` als vollen Pfad (`{id}/_history/{version}`), nicht als kurze Versionsnummer. Dieser Wert ist nicht direkt als `If-Match`-Header verwendbar. |
+| `PUT /Patient/{id}` — Optimistic Locking mit `If-Match` | Der Versionskonflikt-Check (→ 409) wird ausgelöst, wenn der `If-Match: W/"<version>"`-Header mitgesendet wird. HAPI-FHIR-Clients setzen diesen automatisch, wenn die Versionsnummer im `idElement` gesetzt ist. Ohne `If-Match`-Header überspringt der Server den Versionscheck — empfohlen wird, den Header immer mitzusenden, um unbeabsichtigte Überschreibungen zu verhindern. |
+| `meta.versionId` im Patient-Response | Der Server liefert `meta.versionId` als vollen Pfad (`{id}/_history/{version}`), nicht als kurze Versionsnummer. Die kurze Versionsnummer für den `If-Match`-Header lässt sich daraus per `IdType(meta.versionId).versionIdPart` extrahieren (ergibt z.B. `"4"` aus `"abc123/_history/4"`). |
 | Warnungen | Ohne `X-TreatWarningAsError: false` werden Warnungen als Fehler behandelt. |
 | Demo-Content-Type | Demo sendet XML-Content-Type; JSON-Beispiele müssen JSON-Content-Type setzen. |
 
@@ -582,7 +582,10 @@ X-API-Key: <API_KEY>
 
 #### 1.5 Patient aktualisieren
 
-**Request** — versionslose URL verwenden (kein `/_history/`), um unbeabsichtigte 409-Fehler zu vermeiden:
+**Request** — mit `If-Match`-Header für Optimistic Locking (empfohlen):
+
+> `<VERSION>` = kurze Versionsnummer aus `meta.versionId` des vorherigen Lesezugriffs, extrahiert via `IdType(meta.versionId).versionIdPart` (z.B. `"4"` aus `"abc123/_history/4"`).
+> Ohne `If-Match`-Header wird kein Versionscheck durchgeführt.
 
 ```http
 PUT https://<HOST>/aps/fhir/api/r4/Patient/<PATIENT_OBJECT_ID>
@@ -590,6 +593,7 @@ Content-Type: application/fhir+json
 Accept: application/fhir+json
 Authorization: Bearer <OAUTH_TOKEN>
 X-API-Key: <API_KEY>
+If-Match: W/"<VERSION>"
 
 {
   "resourceType": "Patient",

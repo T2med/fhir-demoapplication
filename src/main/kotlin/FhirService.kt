@@ -436,12 +436,13 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
                 }
             }
 
-            // versionId ins idElement setzen, damit HAPI FHIR automatisch
-            // den If-Match-Header mitsendet → Optimistic Locking aktiv.
+            // meta.versionId liefert den vollen Pfad "{id}/_history/{version}" —
+            // daraus nur die kurze Versionsnummer extrahieren, damit HAPI FHIR
+            // automatisch If-Match: W/"<version>" mitsendet → Optimistic Locking aktiv.
             // Ohne versionId (sollte nicht vorkommen) Fallback auf versionslosen PUT.
-            val versionId = patient.meta?.versionId
-            if (versionId != null) {
-                patient.idElement = IdType("Patient", patient.idElement.idPart, versionId)
+            val version = patient.meta?.versionId?.let { IdType(it).versionIdPart }
+            if (version != null) {
+                patient.idElement = IdType("Patient", patient.idElement.idPart, version)
             } else {
                 patient.setId(patient.idElement.toUnqualifiedVersionless())
             }
