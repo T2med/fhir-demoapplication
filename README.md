@@ -46,29 +46,29 @@ Das Client-Secret wird ausschließlich im Arbeitsspeicher gehalten und nie persi
 Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 
 - Patient über Kontext-Identifier suchen
+- Patient per Name, Vorname und Geburtsdatum suchen
 - `Observation` mit Profil `Befund` anlegen
 - `Condition` für eine Diagnose anlegen
 - `Procedure` mit Profil `Therapie` anlegen
 - `DocumentReference` für Freitext anlegen
-- FHIR-Transaction-Bundle mit `Observation` und `Condition` senden
-
-### Bereits implementierte, bisher kaum dokumentierte Anwendungsfälle
-
-Zusätzlich zur GUI sind im `FhirService` weitere Fälle implementiert und über Tests abgedeckt:
-
-- Patient per Name, Vorname und Geburtsdatum suchen
-- Patient per logischer FHIR-ID lesen
-- `Observation` in den Typen `befund`, `anamnese`, `freitext` anlegen
-- `Procedure` in den Typen `therapie`, `prozedere` anlegen
-- Ressourcen als FHIR-Transaction-Bundle gebündelt anlegen
 
 ## Technischer Ablauf
+
+### Startpfad 1: Deep Link
 
 1. APS startet den Drittanbieter über einen Deep Link.
 2. Die Demo extrahiert `kontextId`, `fhirBasisUrl` und `oAuthToken`.
 3. Für `https://`-Basis-URLs wird ein eigener HTTP-/SSL-Client konfiguriert, der auch installationsspezifische lokale Zertifikate akzeptiert.
 4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api`.
 5. Kontextgebundene Ressourcen erhalten automatisch den Identifier `https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`.
+
+### Startpfad 2: OAuth Device Flow
+
+1. Nutzer klickt auf „Standalone-Anmeldung (Device Flow)".
+2. Die Demo sendet eine Device-Authorization-Anfrage an den konfigurierten Auth-Server.
+3. User-Code und Verification-URI werden angezeigt; der Nutzer authentifiziert sich im Browser.
+4. Die Demo pollt den Token-Endpunkt bis ein `access_token` geliefert wird.
+5. Nutzer gibt `fhirBasisUrl` und `kontextId` ein; ab diesem Punkt verhält sich die App identisch zu Startpfad 1.
 
 ## FHIR-Konfiguration
 
@@ -210,6 +210,8 @@ Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte 
 
 ## Empfohlener Schnelltest
 
+### Schnelltest via Deep Link
+
   1. JAR oder natives Paket bauen.
   2. App starten oder als URL-Handler registrieren.
   3. Im APS-Client:
@@ -219,6 +221,16 @@ Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte 
   4. In der GUI der Demoapp prüfen, ob der `FhirService` initialisiert wurde.
   5. Eine oder mehrere Schreiboperationen testen.
   6. Das `OperationOutcome` bzw. die Bundle-Statuses im Logbereich prüfen.
+
+### Schnelltest via Device Flow
+
+  1. `device-flow.properties` mit den Auth-Server-Endpunkten befüllen (oder Werte direkt im Dialog eingeben).
+  2. Im APS-Client für den Drittanbieter ein Client-Secret generieren und in die Zwischenablage kopieren.
+  3. Demoapp starten, Button „Standalone-Anmeldung (Device Flow)" klicken.
+  4. Client-Secret einfügen, „Device Flow starten" klicken.
+  5. Angezeigte URL im Browser öffnen, User-Code eingeben und Zugriff bestätigen.
+  6. Nach erfolgreichem Token-Erhalt: FHIR-Basis-URL und Kontext-ID eingeben, „Verbinden" klicken.
+  7. Schreiboperationen wie im Deep-Link-Test testen.
 
 ## Weiterführende Referenz
 
