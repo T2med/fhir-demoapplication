@@ -185,27 +185,35 @@ class FhirServiceTest {
         verify(mockSearchAnd1).and(argThat<ICriterion<*>> { true })
     }
 
+    private fun mockUpdate(outcome: OperationOutcome): IUpdate {
+        val mockUpdate = mock<IUpdate>()
+        val mockUpdateTyped = mock<IUpdateTyped>()
+        val mockUpdateWithHeader = mock<IUpdateTyped>()
+        val mockMethodOutcome = mock<ca.uhn.fhir.rest.api.MethodOutcome>()
+        whenever(mockClient.update()).thenReturn(mockUpdate)
+        whenever(mockUpdate.resource(any<Patient>())).thenReturn(mockUpdateTyped)
+        whenever(mockUpdateTyped.withAdditionalHeader(any(), any())).thenReturn(mockUpdateWithHeader)
+        whenever(mockUpdateWithHeader.execute()).thenReturn(mockMethodOutcome)
+        whenever(mockMethodOutcome.operationOutcome).thenReturn(outcome)
+        return mockUpdate
+    }
+
     @Test
     fun `test updatePatient sets versionId in idElement for optimistic locking`() {
         val patient = Patient().apply {
             id = "Patient/123"
             meta = Meta().apply { versionId = "4" }
+            addName().apply { family = "Muster"; addGiven("Max") }
         }
         val mockOutcome = OperationOutcome().apply {
             addIssue().apply { severity = OperationOutcome.IssueSeverity.INFORMATION }
         }
-        val mockUpdate = mock<IUpdate>()
-        val mockUpdateTyped = mock<IUpdateTyped>()
-        val mockUpdateWithHeader = mock<IUpdateTyped>()
-        val mockMethodOutcome = mock<ca.uhn.fhir.rest.api.MethodOutcome>()
+        val spy = org.mockito.kotlin.spy(fhirService)
+        doReturn(patient).`when`(spy).readPatient("123")
+        val mockUpdate = mockUpdate(mockOutcome)
 
-        whenever(mockClient.update()).thenReturn(mockUpdate)
-        whenever(mockUpdate.resource(any<Patient>())).thenReturn(mockUpdateTyped)
-        whenever(mockUpdateTyped.withAdditionalHeader(any(), any())).thenReturn(mockUpdateWithHeader)
-        whenever(mockUpdateWithHeader.execute()).thenReturn(mockMethodOutcome)
-        whenever(mockMethodOutcome.operationOutcome).thenReturn(mockOutcome)
-
-        val result = fhirService.updatePatient(patient)
+        val data = PatientUpdateData("Muster", "Max", "", null, null)
+        val result = spy.updatePatient("123", data)
 
         assertNotNull(result)
         verify(mockUpdate).resource(argThat<Patient> {
@@ -214,23 +222,21 @@ class FhirServiceTest {
     }
 
     @Test
-    fun `test updatePatient without versionId skips optimistic locking`() {
-        val patient = Patient().apply { id = "Patient/123" }
+    fun `test updatePatient without versionId falls back to versionless PUT`() {
+        val patient = Patient().apply {
+            id = "Patient/123"
+            // kein meta.versionId → Fallback auf versionslosen PUT
+            addName().apply { family = "Muster"; addGiven("Max") }
+        }
         val mockOutcome = OperationOutcome().apply {
             addIssue().apply { severity = OperationOutcome.IssueSeverity.INFORMATION }
         }
-        val mockUpdate = mock<IUpdate>()
-        val mockUpdateTyped = mock<IUpdateTyped>()
-        val mockUpdateWithHeader = mock<IUpdateTyped>()
-        val mockMethodOutcome = mock<ca.uhn.fhir.rest.api.MethodOutcome>()
+        val spy = org.mockito.kotlin.spy(fhirService)
+        doReturn(patient).`when`(spy).readPatient("123")
+        val mockUpdate = mockUpdate(mockOutcome)
 
-        whenever(mockClient.update()).thenReturn(mockUpdate)
-        whenever(mockUpdate.resource(any<Patient>())).thenReturn(mockUpdateTyped)
-        whenever(mockUpdateTyped.withAdditionalHeader(any(), any())).thenReturn(mockUpdateWithHeader)
-        whenever(mockUpdateWithHeader.execute()).thenReturn(mockMethodOutcome)
-        whenever(mockMethodOutcome.operationOutcome).thenReturn(mockOutcome)
-
-        val result = fhirService.updatePatient(patient)
+        val data = PatientUpdateData("Muster", "Max", "", null, null)
+        val result = spy.updatePatient("123", data)
 
         assertNotNull(result)
         verify(mockUpdate).resource(argThat<Patient> {
