@@ -1,5 +1,7 @@
 import constants.AppConstants
 import constants.FhirConstants
+import deviceflow.DeviceFlowConfig
+import deviceflow.DeviceFlowPanel
 import org.hl7.fhir.r4.model.*
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
@@ -57,6 +59,9 @@ class DemoApp : JFrame("T2demo Custom URL App") {
     private var oAuthToken: String? = null
     private var fhirService: FhirService? = null
 
+    // Accumulates deep-link params for Device Flow pre-fill
+    private val deepLinkParams = mutableMapOf<String, String>()
+
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
         setSize(950, 780)
@@ -65,10 +70,15 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         val mainPanel = JPanel(BorderLayout(10, 10))
         mainPanel.border = BorderFactory.createEmptyBorder(10, 10, 10, 10)
         
-        // Titelbereich
+        // Titelbereich mit Device-Flow-Button
+        val titlePanel = JPanel(BorderLayout(10, 0))
         val titleLabel = JLabel("T2demo FHIR API Demo", JLabel.CENTER)
         titleLabel.font = Font("Arial", Font.BOLD, 20)
-        mainPanel.add(titleLabel, BorderLayout.NORTH)
+        val btnDeviceFlow = JButton("Standalone-Anmeldung (Device Flow)")
+        btnDeviceFlow.addActionListener { showDeviceFlowMode() }
+        titlePanel.add(titleLabel, BorderLayout.CENTER)
+        titlePanel.add(btnDeviceFlow, BorderLayout.EAST)
+        mainPanel.add(titlePanel, BorderLayout.NORTH)
 
         // Center SplitPane: URL Details oben, API Tests unten
         val centerPanel = JPanel(BorderLayout(0, 10))
@@ -185,6 +195,36 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         @Suppress("UNCHECKED_CAST")
         val logFunc = rootPane.getClientProperty("logFunc") as? (String) -> Unit
         logFunc?.invoke(msg)
+    }
+
+    fun initializeFhirService(fhirUrl: String, kontext: String, accessToken: String) {
+        fhirBasisUrl = fhirUrl
+        kontextId = kontext
+        oAuthToken = accessToken
+        fhirService = FhirService(fhirUrl, AppConstants.API_KEY, accessToken)
+        log("FHIR-Service initialisiert für $fhirUrl")
+        logger.info("FHIR-Service initialisiert für {}", fhirUrl)
+    }
+
+    fun showDeviceFlowMode(config: DeviceFlowConfig? = null) {
+        val effectiveConfig = config ?: DeviceFlowConfig.fromDeepLinkParams(deepLinkParams)
+        val dialog = JDialog(this, "Standalone-Anmeldung (Device Flow)", true)
+        val panel = DeviceFlowPanel(
+            initialConfig = effectiveConfig,
+            initialFhirUrl = fhirBasisUrl ?: "",
+            initialKontextId = kontextId ?: ""
+        ) { fhirUrl, kontext, token ->
+            SwingUtilities.invokeLater {
+                initializeFhirService(fhirUrl, kontext, token)
+                dialog.dispose()
+            }
+        }
+        dialog.defaultCloseOperation = JDialog.DISPOSE_ON_CLOSE
+        dialog.contentPane = panel
+        dialog.pack()
+        dialog.setSize(560, dialog.height.coerceAtLeast(480))
+        dialog.setLocationRelativeTo(this)
+        dialog.isVisible = true
     }
 
     private fun testSearchPatient() {
@@ -587,6 +627,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         urlLabel.text = url
         urlLabel.caretPosition = 0
         tableModel.rowCount = 0
+        deepLinkParams.clear()
 
         try {
             val uri = URI(url)
@@ -602,8 +643,8 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                     val key = URLDecoder.decode(pair[0], "UTF-8")
                     val value = if (pair.size > 1) URLDecoder.decode(pair[1], "UTF-8") else ""
                     tableModel.addRow(arrayOf(key, value))
+                    deepLinkParams[key] = value
 
-                    // FHIR relevante Parameter extrahieren
                     when (key) {
                         AppConstants.QUERY_PARAM_KONTEXT_ID -> kontextId = value
                         AppConstants.QUERY_PARAM_FHIR_BASIS_URL -> fhirBasisUrl = value
@@ -613,9 +654,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             }
 
             if (fhirBasisUrl != null && oAuthToken != null) {
-                fhirService = FhirService(fhirBasisUrl!!, "7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE", oAuthToken!!)
-                log("FHIR-Service initialisiert für $fhirBasisUrl")
-                logger.info("FHIR-Service initialisiert für {}", fhirBasisUrl)
+                initializeFhirService(fhirBasisUrl!!, kontextId ?: "", oAuthToken!!)
             } else {
                 log("FHIR-Service konnte nicht initialisiert werden (fhirBasisUrl oder oAuthToken fehlt)")
             }

@@ -22,6 +22,58 @@ Wichtig:
 | Kontextdauer | Kontexte werden bis zu 4 Stunden vorgehalten und stündlich bereinigt. |
 | Kontextpflicht | Kontextgebundene `create`-Operationen und `GET /Patient?identifier=...` benötigen einen gültigen Kontext. |
 
+## 1a. OAuth Device Flow als alternativer Einstieg (RFC 8628)
+
+Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token unterstützt die Demoapplikation den OAuth 2.0 Device Flow als eigenständigen Authentifizierungsweg. Dieser Pfad ist besonders relevant für Präsentationen, Schulungen und Integrationstests, bei denen kein APS-Client-Start zur Verfügung steht.
+
+### Ablauf
+
+```
+Demoapplikation                 Auth-Server                       Browser (Nutzer)
+      |                              |                                   |
+      |-- POST /device_authorization -->|                                |
+      |<-- device_code, user_code, ------|                               |
+      |    verification_uri, expires_in  |                               |
+      |                              |                                   |
+      |  zeigt user_code + URI ------>|                               Nutzer öffnet URI
+      |                              |<---- Nutzer gibt user_code ein ---|
+      |                              |                                   |
+      |-- POST /token (polling) ----->|                                  |
+      |   (Authorization: Basic, grant_type=urn:ietf:params:oauth:...)  |
+      |<-- authorization_pending -----| (Nutzer noch nicht autorisiert) |
+      |   (warten, erneut pollen)    |                                   |
+      |-- POST /token (polling) ----->|                                  |
+      |<-- access_token, token_type --|  (Nutzer hat autorisiert)        |
+      |                              |                                   |
+      | FHIR-Service initialisiert   |                                   |
+```
+
+### Konfigurationsparameter
+
+| Parameter | Quelle | Beschreibung |
+| --- | --- | --- |
+| `deviceAuthUrl` | Deep-Link-Parameter oder `device-flow.properties` | URL des Device Authorization Endpoint |
+| `tokenUrl` | Deep-Link-Parameter oder `device-flow.properties` | URL des Token Endpoint |
+| `clientId` | Deep-Link-Parameter oder `device-flow.properties` | OAuth Client ID |
+| `clientSecret` | Manuelle Eingabe per Paste | Aus APS-Drittanbieter-Einrichtung; nur im Arbeitsspeicher |
+| `scope` | `device-flow.properties` | OAuth Scope (Standard: `openid profile`) |
+
+Das Client-Secret wird nie persistiert, geloggt oder automatisch übertragen. Es wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff in die Zwischenablage gelegt und von dort durch den Nutzer in das Passwortfeld eingefügt.
+
+### Polling-Verhalten
+
+| Server-Antwort | Bedeutung | Verhalten der Demo |
+| --- | --- | --- |
+| `200 OK` mit `access_token` | Autorisierung erfolgreich | Token übernehmen, Phase 3 anzeigen |
+| `authorization_pending` | Nutzer hat noch nicht autorisiert | Warten, erneut pollen |
+| `slow_down` | Polling zu häufig | Polling-Intervall um 5 Sekunden erhöhen |
+| `expired_token` | Device Code abgelaufen | Fehleranzeige, Neustart erforderlich |
+| `access_denied` | Nutzer hat abgelehnt | Fehleranzeige |
+
+### Ergebnis nach erfolgreichem Device Flow
+
+Nach erfolgreichem Token-Erhalt ist der FHIR-Service identisch initialisiert wie beim klassischen Deep-Link-Pfad. Alle FHIR-Operationen stehen unverändert zur Verfügung.
+
 ## 2. Voraussetzungen
 
 ### 2.1 Serverseitig (APS)
@@ -407,6 +459,7 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 
 ## 11. Go-Live-Checkliste
 
+**Klassischer Deep-Link-Pfad:**
 - [ ] Drittanbieter in APS aktiviert
 - [ ] API-Key vorhanden und sicher hinterlegt
 - [ ] `drittanbieterKey` bzw. Hersteller/Produkt korrekt konfiguriert
@@ -423,7 +476,19 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 - [ ] Optional: Transaction-Verhalten mit Rollback geprüft
 - [ ] Monitoring für HTTP-Status und `OperationOutcome` vorhanden
 
+**Zusätzlich bei OAuth Device Flow (Variante B):**
+- [ ] OAuth Device Authorization Endpoint und Token Endpoint bekannt und erreichbar
+- [ ] Client Secret aus APS-Drittanbieter-Einrichtung bereitgestellt
+- [ ] Client Secret wird ausschließlich im Arbeitsspeicher gehalten, nie persistiert oder geloggt
+- [ ] Polling-Verhalten für `authorization_pending`, `slow_down`, `expired_token` und `access_denied` implementiert
+- [ ] Polling-Intervall bei `slow_down` korrekt erhöht (mindestens +5 Sekunden)
+- [ ] Device Code Expiry korrekt behandelt (Neustart erforderlich)
+- [ ] Test: kompletter Device Flow mit Autorisierung im Browser
+- [ ] Test: Abbruch und erneuter Start des Device Flow
+
 ## 12. Schnellstart (Minimalfluss)
+
+### Variante A: Klassischer Deep-Link-Pfad
 
 1. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
 2. HTTPS-Client für `fhirBasisUrl` mit passender SSL-Konfiguration initialisieren.
@@ -433,6 +498,16 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 6. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier oder Encounter-Referenz anlegen.
 7. `OperationOutcome` und HTTP-Status auswerten.
 8. Kontext bei Bedarf entfernen und nicht wiederverwenden.
+
+### Variante B: OAuth Device Flow
+
+1. `POST <deviceAuthUrl>` mit `client_id`, `client_secret` und `scope` im Body (Form-Encoded).
+2. `device_code`, `user_code`, `verification_uri`, `expires_in` und `interval` aus der Response lesen.
+3. `user_code` und `verification_uri` dem Nutzer anzeigen.
+4. Polling: `POST <tokenUrl>` mit `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code`, `client_id`, `client_secret` — alle `interval` Sekunden.
+5. Bei `authorization_pending`: warten und erneut pollen. Bei `slow_down`: Intervall um 5 Sekunden erhöhen.
+6. Bei `200 OK` mit `access_token`: Token übernehmen, FHIR-Client wie in Variante A initialisieren.
+7. Ab hier identisch mit Variante A: FHIR-Operationen mit `Authorization: Bearer <access_token>` ausführen.
 
 ## Externe API Request-/Response-Beispiele
 

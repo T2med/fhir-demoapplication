@@ -36,9 +36,17 @@ object AppConstants {
     // Logging and Error Messages
     const val ERROR_KONTEXT_ID_MISSING = "Fehler: Keine kontextId vorhanden"
     const val ERROR_FHIR_SERVICE_NOT_INITIALIZED = "Fehler: FhirService nicht initialisiert"
-    
-    // Query Parameters
+
+    // API Key (test/demo only — not a secret)
+    const val API_KEY = "7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE"
+
+    // Query Parameters — Deep Link (classic)
     const val QUERY_PARAM_KONTEXT_ID = "kontextId"
     const val QUERY_PARAM_FHIR_BASIS_URL = "fhirBasisUrl"
     const val QUERY_PARAM_OAUTH_TOKEN = "oAuthToken"
+
+    // Query Parameters — Deep Link (Device Flow pre-fill)
+    const val QUERY_PARAM_DEVICE_AUTH_URL = "deviceAuthUrl"
+    const val QUERY_PARAM_TOKEN_URL = "tokenUrl"
+    const val QUERY_PARAM_CLIENT_ID = "clientId"
 }

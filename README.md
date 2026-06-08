@@ -1,6 +1,6 @@
 # T2med FHIR-API-Demo
 
-Diese Demoapplikation ist eine Desktop-Referenz für die Deep-Link-basierte Anbindung eines Drittanbieters an die externe T2med-FHIR-API. Sie verarbeitet einen `T2demo://`-Aufruf, extrahiert den API-Kontext aus der URL und stellt anschließend typische FHIR-Lese- und Schreiboperationen gegen einen APS-FHIR-Endpunkt bereit.
+Diese Demoapplikation ist eine Desktop-Referenz für die Anbindung eines Drittanbieters an die externe T2med-FHIR-API. Sie unterstützt zwei Startpfade: den Deep-Link-basierten Start aus dem APS-Client heraus sowie einen eigenständigen OAuth-Device-Flow-Start. Nach der Authentifizierung stellt sie typische FHIR-Lese- und Schreiboperationen gegen einen APS-FHIR-Endpunkt bereit.
 
 Die README beschreibt den aktuellen Implementierungsstand der Demo. Fachliche Integrationsdetails und HTTP-Beispiele stehen zusätzlich im [Integrationsleitfaden-FHIR-API.md](./Integrationsleitfaden-FHIR-API.md).
 
@@ -13,14 +13,33 @@ Die App startet über ein Custom-URL-Scheme und wertet diese Query-Parameter aus
 - `kontextId`
 - `fhirBasisUrl`
 - `oAuthToken`
+- `deviceAuthUrl` *(optional, für Device-Flow-Vorausfüllung)*
+- `tokenUrl` *(optional, für Device-Flow-Vorausfüllung)*
+- `clientId` *(optional, für Device-Flow-Vorausfüllung)*
 
-Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Parameter werden sichtbar gemacht. Wenn `fhirBasisUrl` und `oAuthToken` vorhanden sind, initialisiert die App automatisch einen `FhirService`.
+Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Parameter werden sichtbar gemacht. Wenn `fhirBasisUrl` und `oAuthToken` vorhanden sind, initialisiert die App automatisch einen `FhirService`. Wenn `deviceAuthUrl` enthalten ist, werden die OAuth-Felder im Device-Flow-Dialog vorausgefüllt.
 
-Beispiel:
+Beispiel (klassischer Deep-Link-Start):
 
 ```text
 T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=<OAUTH_TOKEN>
 ```
+
+Beispiel (Deep-Link mit Device-Flow-Parametern):
+
+```text
+T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&deviceAuthUrl=https%3A%2F%2Fauth.example.com%2Fdevice_authorization&tokenUrl=https%3A%2F%2Fauth.example.com%2Ftoken&clientId=<CLIENT_ID>
+```
+
+### OAuth Device Flow (Standalone-Anmeldung)
+
+Über den Button **„Standalone-Anmeldung (Device Flow)"** kann der Authentifizierungsfluss nach RFC 8628 ohne vorherigen Deep-Link-Token demonstriert werden. Der Dialog führt in drei Phasen durch den Flow:
+
+1. **Konfiguration**: Eingabe von Device Auth URL, Token URL, Client ID und Client-Secret (per Paste aus der Zwischenablage). Felder werden aus dem Deep-Link oder `device-flow.properties` vorausgefüllt.
+2. **Warten**: Die App zeigt einen User-Code und eine Verification-URI an. Der Nutzer öffnet die URL im Browser und gibt dort den Code ein. Die App pollt im Hintergrund den Token-Endpunkt.
+3. **Verbinden**: Nach erfolgreichem Token-Erhalt gibt der Nutzer FHIR-Basis-URL und Kontext-ID ein. Die App initialisiert den FHIR-Service identisch zum Deep-Link-Pfad.
+
+Das Client-Secret wird ausschließlich im Arbeitsspeicher gehalten und nie persistiert oder geloggt.
 
 ### GUI-Demoaktionen
 
