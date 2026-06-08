@@ -216,6 +216,22 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
+    fun updatePatient(patient: Patient): OperationOutcome {
+        try {
+            val versionId = patient.meta?.versionId
+            if (versionId != null) {
+                patient.idElement = IdType("Patient", patient.idElement.idPart, versionId)
+            }
+            val result = client.update()
+                .resource(patient)
+                .withAdditionalHeader(FhirConstants.HEADER_X_FHIR_PROFILE, FhirConstants.PROFILE_PATIENT)
+                .execute()
+            return result.operationOutcome as OperationOutcome
+        } catch (e: Exception) {
+            throw wrapExceptionWithUrl(e, "updatePatient")
+        }
+    }
+
     fun createObservation(kontextId: String, type: String, value: String): OperationOutcome {
         try {
             val obs = Observation()
