@@ -1,15 +1,22 @@
 package deviceflow
 
+import TrustAllCerts
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.http.client.entity.UrlEncodedFormEntity
 import org.apache.http.client.methods.HttpPost
+import org.apache.http.conn.ssl.NoopHostnameVerifier
+import org.apache.http.conn.ssl.SSLConnectionSocketFactory
 import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.impl.client.HttpClients
+import org.apache.http.impl.conn.PoolingHttpClientConnectionManager
+import org.apache.http.config.RegistryBuilder
+import org.apache.http.conn.socket.ConnectionSocketFactory
+import org.apache.http.conn.socket.PlainConnectionSocketFactory
 import org.apache.http.message.BasicNameValuePair
 
 class DeviceFlowService(
     private val config: DeviceFlowConfig,
-    private val httpClient: CloseableHttpClient = HttpClients.createDefault()
+    private val httpClient: CloseableHttpClient = buildHttpClient(config.deviceAuthUrl)
 ) {
     private val mapper = ObjectMapper()
 
@@ -57,6 +64,20 @@ class DeviceFlowService(
                 expiresIn = json.get("expires_in")?.asInt() ?: 300,
                 interval = json.get("interval")?.asInt() ?: 5
             )
+        }
+    }
+
+    companion object {
+        fun buildHttpClient(url: String): CloseableHttpClient {
+            if (!url.startsWith("https://")) return HttpClients.createDefault()
+            val sslContext = TrustAllCerts.getDynamicSslContext()
+            val sslSocketFactory = SSLConnectionSocketFactory(sslContext, NoopHostnameVerifier.INSTANCE)
+            val registry = RegistryBuilder.create<ConnectionSocketFactory>()
+                .register("http", PlainConnectionSocketFactory.getSocketFactory())
+                .register("https", sslSocketFactory)
+                .build()
+            val connManager = PoolingHttpClientConnectionManager(registry)
+            return HttpClients.custom().setConnectionManager(connManager).build()
         }
     }
 
