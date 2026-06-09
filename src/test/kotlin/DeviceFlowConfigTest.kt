@@ -18,7 +18,7 @@ class DeviceFlowConfigTest {
     @Test
     fun `load returns default scope from file`() {
         val config = DeviceFlowConfig.load()
-        assertEquals("openid profile", config.scope)
+        assertEquals("t2med/aps/fhir", config.scope)
     }
 
     @Test
