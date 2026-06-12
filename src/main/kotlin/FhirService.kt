@@ -527,11 +527,22 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         val url = lastUrlInterceptor.lastUrl ?: baseUrl
         println("[DEBUG] Fehler bei $methodName - URL war: $url")
         if (e is ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException) {
-            val msg = e.message ?: ""
-            if (e.statusCode == 403 && msg.contains("fehlt oder ist ungültig")) {
+            val serverDetail = e.operationOutcome
+                ?.let { it as? OperationOutcome }
+                ?.issue
+                ?.mapNotNull { issue ->
+                    listOfNotNull(issue.diagnostics, issue.details?.text)
+                        .joinToString(" — ").ifBlank { null }
+                }
+                ?.joinToString("; ")
+                ?.ifBlank { null }
+                ?: e.responseBody?.ifBlank { null }
+
+            val combined = listOfNotNull(e.message, serverDetail).joinToString(": ")
+            if (e.statusCode == 403 && (serverDetail ?: e.message ?: "").contains("fehlt oder ist ungültig")) {
                 return Exception("Demo-API-Key-Limit erreicht — bitte APS-Server neu starten. (URL: $url)", e)
             }
-            return Exception("$msg (URL: $url)", e)
+            return Exception("$combined (URL: $url)", e)
         }
         return e
     }
