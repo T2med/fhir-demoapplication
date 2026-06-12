@@ -13,6 +13,7 @@ import org.apache.http.config.RegistryBuilder
 import org.apache.http.conn.socket.ConnectionSocketFactory
 import org.apache.http.conn.socket.PlainConnectionSocketFactory
 import org.apache.http.message.BasicNameValuePair
+import java.util.Base64
 
 class DeviceFlowService(
     private val config: DeviceFlowConfig,
@@ -35,11 +36,16 @@ class DeviceFlowService(
         data class Error(val error: String, val description: String?) : PollResult()
     }
 
+    private fun basicAuthHeader(): String {
+        val credentials = "${config.clientId}:${config.clientSecret}"
+        return "Basic " + Base64.getEncoder().encodeToString(credentials.toByteArray(Charsets.UTF_8))
+    }
+
     fun requestDeviceAuthorization(): DeviceAuthResponse {
         val post = HttpPost(config.deviceAuthUrl)
+        post.setHeader("Authorization", basicAuthHeader())
         val params = listOf(
             BasicNameValuePair("client_id", config.clientId),
-            BasicNameValuePair("client_secret", config.clientSecret),
             BasicNameValuePair("scope", config.scope)
         )
         post.entity = UrlEncodedFormEntity(params, Charsets.UTF_8)
@@ -83,11 +89,11 @@ class DeviceFlowService(
 
     fun pollForToken(deviceCode: String): PollResult {
         val post = HttpPost(config.tokenUrl)
+        post.setHeader("Authorization", basicAuthHeader())
         val params = listOf(
             BasicNameValuePair("grant_type", "urn:ietf:params:oauth:grant-type:device_code"),
             BasicNameValuePair("device_code", deviceCode),
-            BasicNameValuePair("client_id", config.clientId),
-            BasicNameValuePair("client_secret", config.clientSecret)
+            BasicNameValuePair("client_id", config.clientId)
         )
         post.entity = UrlEncodedFormEntity(params, Charsets.UTF_8)
 
