@@ -62,13 +62,16 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
     private class LastUrlInterceptor : IClientInterceptor {
         var lastUrl: String? = null
             private set
+        var lastWwwAuthenticate: String? = null
+            private set
 
         override fun interceptRequest(theRequest: IHttpRequest) {
             lastUrl = theRequest.uri
+            lastWwwAuthenticate = null
         }
 
         override fun interceptResponse(theResponse: IHttpResponse) {
-            // Nothing to do
+            lastWwwAuthenticate = theResponse.getAllHeaders()["WWW-Authenticate"]?.firstOrNull()
         }
     }
 
@@ -525,7 +528,6 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
 
     private fun wrapExceptionWithUrl(e: Exception, methodName: String): Exception {
         val url = lastUrlInterceptor.lastUrl ?: baseUrl
-        println("[DEBUG] Fehler bei $methodName - URL war: $url")
         if (e is ca.uhn.fhir.rest.server.exceptions.BaseServerResponseException) {
             val serverDetail = e.operationOutcome
                 ?.let { it as? OperationOutcome }
@@ -537,6 +539,7 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
                 ?.joinToString("; ")
                 ?.ifBlank { null }
                 ?: e.responseBody?.ifBlank { null }
+                ?: lastUrlInterceptor.lastWwwAuthenticate?.ifBlank { null }
 
             val combined = listOfNotNull(e.message, serverDetail).joinToString(": ")
             if (e.statusCode == 403 && (serverDetail ?: e.message ?: "").contains("fehlt oder ist ungültig")) {
