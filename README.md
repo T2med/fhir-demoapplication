@@ -13,29 +13,20 @@ Die App startet über ein Custom-URL-Scheme und wertet diese Query-Parameter aus
 - `kontextId`
 - `fhirBasisUrl`
 - `oAuthToken`
-- `deviceAuthUrl` *(optional, für Device-Flow-Vorausfüllung)*
-- `tokenUrl` *(optional, für Device-Flow-Vorausfüllung)*
-- `clientId` *(optional, für Device-Flow-Vorausfüllung)*
 
-Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Parameter werden sichtbar gemacht. Wenn `fhirBasisUrl` und `oAuthToken` vorhanden sind, initialisiert die App automatisch einen `FhirService`. Wenn `deviceAuthUrl` enthalten ist, werden die OAuth-Felder im Device-Flow-Dialog vorausgefüllt.
+Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Parameter werden sichtbar gemacht. Wenn `fhirBasisUrl` und `oAuthToken` vorhanden sind, initialisiert die App automatisch einen `FhirService`. Aus `fhirBasisUrl` wird außerdem automatisch die Auth-Server-URL für den Device-Flow-Dialog abgeleitet (gleicher Host, Port 16596).
 
-Beispiel (klassischer Deep-Link-Start):
+Beispiel:
 
 ```text
 T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=<OAUTH_TOKEN>
-```
-
-Beispiel (Deep-Link mit Device-Flow-Parametern):
-
-```text
-T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&deviceAuthUrl=https%3A%2F%2Fauth.example.com%2Fdevice_authorization&tokenUrl=https%3A%2F%2Fauth.example.com%2Ftoken&clientId=<CLIENT_ID>
 ```
 
 ### OAuth Device Flow (Standalone-Anmeldung)
 
 Über den Button **„Standalone-Anmeldung (Device Flow)"** kann der Authentifizierungsfluss nach RFC 8628 ohne vorherigen Deep-Link-Token demonstriert werden. Der Dialog führt in drei Phasen durch den Flow:
 
-1. **Konfiguration**: Eingabe von Device Auth URL, Token URL, Client ID und Client-Secret (per Paste aus der Zwischenablage). Felder werden aus dem Deep-Link oder `device-flow.properties` vorausgefüllt.
+1. **Konfiguration**: Eingabe von Device Auth URL, Token URL, Client ID und Client-Secret (per Paste aus der Zwischenablage). Felder werden aus `fhirBasisUrl` (URL-Ableitung) oder `device-flow.properties` vorausgefüllt.
 2. **Warten**: Die App zeigt einen User-Code und eine Verification-URI an. Der Nutzer öffnet die URL im Browser und gibt dort den Code ein. Die App pollt im Hintergrund den Token-Endpunkt.
 3. **Verbinden**: Nach erfolgreichem Token-Erhalt gibt der Nutzer FHIR-Basis-URL und Kontext-ID ein. Die App initialisiert den FHIR-Service identisch zum Deep-Link-Pfad.
 

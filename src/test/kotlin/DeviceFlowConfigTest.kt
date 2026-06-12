@@ -22,20 +22,7 @@ class DeviceFlowConfigTest {
     }
 
     @Test
-    fun `fromDeepLinkParams overrides base config with non-blank params`() {
-        val params = mapOf(
-            "deviceAuthUrl" to "https://example.com/device",
-            "tokenUrl" to "https://example.com/token",
-            "clientId" to "my-client"
-        )
-        val config = DeviceFlowConfig.fromDeepLinkParams(params)
-        assertEquals("https://example.com/device", config.deviceAuthUrl)
-        assertEquals("https://example.com/token", config.tokenUrl)
-        assertEquals("my-client", config.clientId)
-    }
-
-    @Test
-    fun `fromDeepLinkParams falls back to base config for missing params`() {
+    fun `fromDeepLinkParams falls back to base config when no fhirBasisUrl`() {
         val config = DeviceFlowConfig.fromDeepLinkParams(emptyMap())
         val base = DeviceFlowConfig.load()
         assertEquals(base.deviceAuthUrl, config.deviceAuthUrl)
@@ -45,17 +32,8 @@ class DeviceFlowConfigTest {
     }
 
     @Test
-    fun `fromDeepLinkParams ignores blank values`() {
-        val params = mapOf("deviceAuthUrl" to "  ", "tokenUrl" to "")
-        val config = DeviceFlowConfig.fromDeepLinkParams(params)
-        val base = DeviceFlowConfig.load()
-        assertEquals(base.deviceAuthUrl, config.deviceAuthUrl)
-        assertEquals(base.tokenUrl, config.tokenUrl)
-    }
-
-    @Test
     fun `fromDeepLinkParams never populates clientSecret`() {
-        val fromParams = DeviceFlowConfig.fromDeepLinkParams(mapOf("clientId" to "id"))
+        val fromParams = DeviceFlowConfig.fromDeepLinkParams(emptyMap())
         assertEquals("", fromParams.clientSecret)
     }
 
@@ -68,14 +46,9 @@ class DeviceFlowConfigTest {
     }
 
     @Test
-    fun `fromDeepLinkParams explicit deviceAuthUrl takes precedence over fhirBasisUrl`() {
-        val params = mapOf(
-            "fhirBasisUrl" to "https://10.42.12.83:16567/aps/fhir/api",
-            "deviceAuthUrl" to "https://other-server/device_authorization"
-        )
+    fun `fromDeepLinkParams uses properties clientId regardless of deep link params`() {
+        val params = mapOf("fhirBasisUrl" to "https://10.42.12.83:16567/aps/fhir/api")
         val config = DeviceFlowConfig.fromDeepLinkParams(params)
-        assertEquals("https://other-server/device_authorization", config.deviceAuthUrl)
-        // tokenUrl still derived from fhirBasisUrl since not explicitly set
-        assertEquals("https://10.42.12.83:16596/oauth2/token", config.tokenUrl)
+        assertEquals(DeviceFlowConfig.load().clientId, config.clientId)
     }
 }

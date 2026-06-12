@@ -52,9 +52,9 @@ Demoapplikation                 Auth-Server                       Browser (Nutze
 
 | Parameter | Quelle | Beschreibung |
 | --- | --- | --- |
-| `deviceAuthUrl` | Deep-Link-Parameter oder `device-flow.properties` | URL des Device Authorization Endpoint |
-| `tokenUrl` | Deep-Link-Parameter oder `device-flow.properties` | URL des Token Endpoint |
-| `clientId` | Deep-Link-Parameter oder `device-flow.properties` | OAuth Client ID — entspricht der `ClientId` aus der APS-Drittanbieter-Definition (Demoapplikation: `t2demo`) |
+| `deviceAuthUrl` | Abgeleitet aus `fhirBasisUrl` (gleicher Host, Port 16596) oder `device-flow.properties` | URL des Device Authorization Endpoint |
+| `tokenUrl` | Abgeleitet aus `fhirBasisUrl` (gleicher Host, Port 16596) oder `device-flow.properties` | URL des Token Endpoint |
+| `clientId` | `device-flow.properties` | OAuth Client ID — entspricht der `ClientId` aus der APS-Drittanbieter-Definition (Demoapplikation: `t2demo`) |
 | `clientSecret` | Manuelle Eingabe per Paste | Aus APS-Drittanbieter-Einrichtung; nur im Arbeitsspeicher |
 | `scope` | `device-flow.properties` | OAuth Scope — aktuell in APS: `t2med/aps/fhir` |
 
@@ -93,7 +93,7 @@ Nach erfolgreichem Token-Erhalt ist der FHIR-Service identisch initialisiert wie
 | Pflichtheader serverseitig | `X-API-Key` |
 | Optionale Serverheader | `X-TreatWarningAsError`, `X-FHIR-Profile` |
 | Demo-Header | `Authorization`, `Prefer`, `X-TreatWarningAsError`, `Content-Type` |
-| Deep-Link-Parameter | `kontextId`, `fhirBasisUrl`, `oAuthToken`; optional: `deviceAuthUrl`, `tokenUrl`, `clientId` |
+| Deep-Link-Parameter | `kontextId`, `fhirBasisUrl`, `oAuthToken` |
 | OAuth Client ID | aus der APS-Drittanbieter-Definition (`ClientId`); für die Demoapplikation: `t2demo` |
 | OAuth Scope | aktuell in APS festgelegt: `t2med/aps/fhir` |
 | Fehlerformat | `OperationOutcome` auswerten |

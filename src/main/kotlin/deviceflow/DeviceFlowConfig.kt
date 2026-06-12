@@ -30,7 +30,9 @@ data class DeviceFlowConfig(
 
         fun fromDeepLinkParams(params: Map<String, String>): DeviceFlowConfig {
             val base = load()
-            // Derive auth server base URL from fhirBasisUrl (same host, auth port 16596)
+            // Derive auth server base URL from fhirBasisUrl (same host, auth port 16596).
+            // APS only ever sends kontextId, fhirBasisUrl and oAuthToken in the Deep Link —
+            // no dedicated OAuth endpoint parameters are transmitted.
             val derivedAuthBase = params["fhirBasisUrl"]
                 ?.takeIf { it.isNotBlank() }
                 ?.let { fhirUrl ->
@@ -40,13 +42,11 @@ data class DeviceFlowConfig(
                     }.getOrNull()
                 }
             return DeviceFlowConfig(
-                deviceAuthUrl = params["deviceAuthUrl"]?.takeIf { it.isNotBlank() }
-                    ?: derivedAuthBase?.let { "$it/oauth2/device_authorization" }
+                deviceAuthUrl = derivedAuthBase?.let { "$it/oauth2/device_authorization" }
                     ?: base.deviceAuthUrl,
-                tokenUrl = params["tokenUrl"]?.takeIf { it.isNotBlank() }
-                    ?: derivedAuthBase?.let { "$it/oauth2/token" }
+                tokenUrl = derivedAuthBase?.let { "$it/oauth2/token" }
                     ?: base.tokenUrl,
-                clientId = params["clientId"]?.takeIf { it.isNotBlank() } ?: base.clientId,
+                clientId = base.clientId,
                 scope = base.scope
             )
         }
