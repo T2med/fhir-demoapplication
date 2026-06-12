@@ -65,8 +65,8 @@ class DeviceFlowService(
                     ?: throw RuntimeException("Feld 'device_code' fehlt in der Antwort"),
                 userCode = json.get("user_code")?.asText()
                     ?: throw RuntimeException("Feld 'user_code' fehlt in der Antwort"),
-                verificationUri = (json.get("verification_uri") ?: json.get("verification_url"))?.asText()
-                    ?: throw RuntimeException("Feld 'verification_uri' fehlt in der Antwort"),
+                verificationUri = (json.get("verification_uri_complete") ?: json.get("verification_uri"))?.asText()
+                    ?: throw RuntimeException("Feld 'verification_uri_complete' fehlt in der Antwort"),
                 expiresIn = json.get("expires_in")?.asInt() ?: 300,
                 interval = json.get("interval")?.asInt() ?: 5
             )

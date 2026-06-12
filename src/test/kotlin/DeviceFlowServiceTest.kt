@@ -46,7 +46,7 @@ class DeviceFlowServiceTest {
 
     @Test
     fun `requestDeviceAuthorization parses all fields correctly`() {
-        val json = """{"device_code":"dev-abc","user_code":"WXYZ-1234","verification_uri":"https://example.com/activate","expires_in":600,"interval":5}"""
+        val json = """{"device_code":"dev-abc","user_code":"WXYZ-1234","verification_uri_complete":"https://example.com/activate?user_code=WXYZ-1234","expires_in":600,"interval":5}"""
         val response = makeResponse(200, json)
         whenever(mockHttpClient.execute(any())).thenReturn(response)
 
@@ -54,24 +54,24 @@ class DeviceFlowServiceTest {
 
         assertEquals("dev-abc", result.deviceCode)
         assertEquals("WXYZ-1234", result.userCode)
-        assertEquals("https://example.com/activate", result.verificationUri)
+        assertEquals("https://example.com/activate?user_code=WXYZ-1234", result.verificationUri)
         assertEquals(600, result.expiresIn)
         assertEquals(5, result.interval)
     }
 
     @Test
-    fun `requestDeviceAuthorization accepts verification_url as fallback`() {
-        val json = """{"device_code":"d","user_code":"U","verification_url":"https://alt.example.com","expires_in":300,"interval":5}"""
+    fun `requestDeviceAuthorization falls back to verification_uri if verification_uri_complete missing`() {
+        val json = """{"device_code":"d","user_code":"U","verification_uri":"https://example.com/activate","expires_in":300,"interval":5}"""
         val response = makeResponse(200, json)
         whenever(mockHttpClient.execute(any())).thenReturn(response)
 
         val result = service.requestDeviceAuthorization()
-        assertEquals("https://alt.example.com", result.verificationUri)
+        assertEquals("https://example.com/activate", result.verificationUri)
     }
 
     @Test
     fun `requestDeviceAuthorization uses defaults for missing optional fields`() {
-        val json = """{"device_code":"d","user_code":"U","verification_uri":"https://example.com"}"""
+        val json = """{"device_code":"d","user_code":"U","verification_uri_complete":"https://example.com/activate?user_code=U"}"""
         val response = makeResponse(200, json)
         whenever(mockHttpClient.execute(any())).thenReturn(response)
 

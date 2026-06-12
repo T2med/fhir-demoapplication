@@ -33,7 +33,8 @@ Demoapplikation                 Auth-Server                       Browser (Nutze
       |                              |                                   |
       |-- POST /device_authorization -->|                                |
       |<-- device_code, user_code, ------|                               |
-      |    verification_uri, expires_in  |                               |
+      |    verification_uri_complete,    |                               |
+      |    expires_in, interval          |                               |
       |                              |                                   |
       |  zeigt user_code + URI ------>|                               Nutzer öffnet URI
       |                              |<---- Nutzer gibt user_code ein ---|
@@ -504,8 +505,8 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 ### Variante B: OAuth Device Flow
 
 1. `POST <deviceAuthUrl>` mit `client_id`, `client_secret` und `scope` im Body (Form-Encoded).
-2. `device_code`, `user_code`, `verification_uri`, `expires_in` und `interval` aus der Response lesen.
-3. `user_code` und `verification_uri` dem Nutzer anzeigen.
+2. `device_code`, `user_code`, `verification_uri_complete` (Fallback: `verification_uri`), `expires_in` und `interval` aus der Response lesen.
+3. `user_code` und `verification_uri_complete` dem Nutzer anzeigen.
 4. Polling: `POST <tokenUrl>` mit `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code`, `client_id`, `client_secret` — alle `interval` Sekunden.
 5. Bei `authorization_pending`: warten und erneut pollen. Bei `slow_down`: Intervall um 5 Sekunden erhöhen.
 6. Bei `200 OK` mit `access_token`: Token übernehmen, FHIR-Client wie in Variante A initialisieren.
