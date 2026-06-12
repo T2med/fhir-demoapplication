@@ -6,7 +6,7 @@ class DeviceFlowPoller(
     private val service: DeviceFlowService,
     private val deviceCode: String,
     private var intervalSeconds: Int,
-    private val onSuccess: (String) -> Unit,
+    private val onSuccess: (accessToken: String, refreshToken: String?) -> Unit,
     private val onError: (String) -> Unit,
     private val onStatusUpdate: (String) -> Unit
 ) : Thread("DeviceFlowPoller") {
@@ -30,7 +30,7 @@ class DeviceFlowPoller(
             try {
                 when (val result = service.pollForToken(deviceCode)) {
                     is DeviceFlowService.PollResult.Success -> {
-                        SwingUtilities.invokeLater { onSuccess(result.accessToken) }
+                        SwingUtilities.invokeLater { onSuccess(result.accessToken, result.refreshToken) }
                         return
                     }
                     is DeviceFlowService.PollResult.SlowDown -> {

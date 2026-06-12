@@ -30,7 +30,7 @@ class DeviceFlowService(
     )
 
     sealed class PollResult {
-        data class Success(val accessToken: String) : PollResult()
+        data class Success(val accessToken: String, val refreshToken: String?) : PollResult()
         object Pending : PollResult()
         object SlowDown : PollResult()
         data class Error(val error: String, val description: String?) : PollResult()
@@ -87,6 +87,30 @@ class DeviceFlowService(
         }
     }
 
+    /**
+     * Tauscht einen Refresh Token gegen einen neuen Access Token.
+     * Gibt null zurück wenn der Refresh Token abgelaufen oder ungültig ist.
+     */
+    fun refreshAccessToken(refreshToken: String): String? {
+        val post = HttpPost(config.tokenUrl)
+        post.setHeader("Authorization", basicAuthHeader())
+        val params = listOf(
+            BasicNameValuePair("grant_type", "refresh_token"),
+            BasicNameValuePair("refresh_token", refreshToken),
+            BasicNameValuePair("client_id", config.clientId)
+        )
+        post.entity = UrlEncodedFormEntity(params, Charsets.UTF_8)
+
+        httpClient.execute(post).use { response ->
+            val body = response.entity.content.readBytes().toString(Charsets.UTF_8)
+            val json = mapper.readTree(body)
+            if (response.statusLine.statusCode == 200 && json.has("access_token")) {
+                return json.get("access_token").asText()
+            }
+            return null
+        }
+    }
+
     fun pollForToken(deviceCode: String): PollResult {
         val post = HttpPost(config.tokenUrl)
         post.setHeader("Authorization", basicAuthHeader())
@@ -102,7 +126,10 @@ class DeviceFlowService(
             val json = mapper.readTree(body)
 
             if (response.statusLine.statusCode == 200 && json.has("access_token")) {
-                return PollResult.Success(json.get("access_token").asText())
+                return PollResult.Success(
+                    accessToken = json.get("access_token").asText(),
+                    refreshToken = json.get("refresh_token")?.asText()
+                )
             }
 
             val error = json.get("error")?.asText() ?: "unknown_error"

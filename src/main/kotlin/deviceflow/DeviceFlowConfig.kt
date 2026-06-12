@@ -28,6 +28,24 @@ data class DeviceFlowConfig(
             )
         }
 
+        /**
+         * Leitet die Auth-Server-URLs direkt aus einer FHIR-Basis-URL ab (gleicher Host, Port 16596).
+         * Wird beim automatischen Reconnect verwendet, wenn keine Deep-Link-Parameter vorliegen.
+         */
+        fun fromFhirUrl(fhirUrl: String): DeviceFlowConfig {
+            val base = load()
+            val authBase = runCatching {
+                val uri = java.net.URI(fhirUrl)
+                "${uri.scheme}://${uri.host}:${AppConstants.AUTH_SERVER_PORT}"
+            }.getOrNull()
+            return DeviceFlowConfig(
+                deviceAuthUrl = authBase?.let { "$it/oauth2/device_authorization" } ?: base.deviceAuthUrl,
+                tokenUrl = authBase?.let { "$it/oauth2/token" } ?: base.tokenUrl,
+                clientId = base.clientId,
+                scope = base.scope
+            )
+        }
+
         fun fromDeepLinkParams(params: Map<String, String>): DeviceFlowConfig {
             val base = load()
             // Derive auth server base URL from fhirBasisUrl (same host, auth port 16596).

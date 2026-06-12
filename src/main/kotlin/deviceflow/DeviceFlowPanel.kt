@@ -9,7 +9,7 @@ class DeviceFlowPanel(
     private val initialConfig: DeviceFlowConfig,
     private val initialFhirUrl: String = "",
     private val initialKontextId: String = "",
-    private val onSuccess: (fhirUrl: String, kontextId: String, token: String) -> Unit
+    private val onSuccess: (fhirUrl: String, kontextId: String, accessToken: String, refreshToken: String?) -> Unit
 ) : JPanel(BorderLayout()) {
 
     private val cards = JPanel(CardLayout())
@@ -40,6 +40,7 @@ class DeviceFlowPanel(
     private val tfKontextId = JTextField(initialKontextId, 36)
     private val btnConnect = JButton("Verbinden")
     private var receivedToken = ""
+    private var receivedRefreshToken: String? = null
 
     init {
         cards.add(buildConfigPanel(), "config")
@@ -214,7 +215,7 @@ class DeviceFlowPanel(
                 kontextId.isBlank() -> JOptionPane.showMessageDialog(
                     this, "Bitte Kontext-ID eingeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE
                 )
-                else -> onSuccess(fhirUrl, kontextId, receivedToken)
+                else -> onSuccess(fhirUrl, kontextId, receivedToken, receivedRefreshToken)
             }
         }
     }
@@ -275,7 +276,7 @@ class DeviceFlowPanel(
                         service = service,
                         deviceCode = authResponse.deviceCode,
                         intervalSeconds = authResponse.interval,
-                        onSuccess = { token -> onTokenReceived(token) },
+                        onSuccess = { token, refreshToken -> onTokenReceived(token, refreshToken) },
                         onError = { msg -> onPollingError(msg) },
                         onStatusUpdate = { msg -> lblStatus.text = msg }
                     )
@@ -317,10 +318,11 @@ class DeviceFlowPanel(
         lblCountdown.text = "Verbleibende Zeit: %02d:%02d".format(mins, secs)
     }
 
-    private fun onTokenReceived(token: String) {
+    private fun onTokenReceived(token: String, refreshToken: String?) {
         countdownTimer?.stop()
         poller = null
         receivedToken = token
+        receivedRefreshToken = refreshToken
         btnStart.isEnabled = true
         btnStart.text = "Device Flow starten"
         cardLayout.show(cards, "connect")
