@@ -9,7 +9,7 @@ class DeviceFlowPanel(
     private val initialConfig: DeviceFlowConfig,
     private val initialFhirUrl: String = "",
     private val initialKontextId: String = "",
-    private val onSuccess: (fhirUrl: String, kontextId: String, accessToken: String, refreshToken: String?) -> Unit
+    private val onSuccess: (fhirUrl: String, kontextId: String, accessToken: String, refreshToken: String?, clientSecret: String) -> Unit
 ) : JPanel(BorderLayout()) {
 
     private val cards = JPanel(CardLayout())
@@ -215,7 +215,7 @@ class DeviceFlowPanel(
                 kontextId.isBlank() -> JOptionPane.showMessageDialog(
                     this, "Bitte Kontext-ID eingeben.", "Eingabe fehlt", JOptionPane.WARNING_MESSAGE
                 )
-                else -> onSuccess(fhirUrl, kontextId, receivedToken, receivedRefreshToken)
+                else -> onSuccess(fhirUrl, kontextId, receivedToken, receivedRefreshToken, String(pfClientSecret.password))
             }
         }
     }

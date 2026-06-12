@@ -229,7 +229,8 @@ class DemoApp : JFrame("T2demo Custom URL App") {
 
     fun initializeFhirService(fhirUrl: String, kontext: String, accessToken: String,
                                mode: ConnectionMode = ConnectionMode.DEEP_LINK,
-                               refreshToken: String? = null) {
+                               refreshToken: String? = null,
+                               clientSecret: String? = null) {
         fhirBasisUrl = fhirUrl
         kontextId = kontext
         oAuthToken = accessToken
@@ -237,7 +238,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         log("FHIR-Service initialisiert für $fhirUrl (Modus: $mode)")
         logger.info("FHIR-Service initialisiert für {} (Modus: {})", fhirUrl, mode)
         updateStatusBar(fhirUrl, kontext, mode)
-        if (mode == ConnectionMode.DEVICE_FLOW) saveLastConnection(fhirUrl, kontext, refreshToken)
+        if (mode == ConnectionMode.DEVICE_FLOW) saveLastConnection(fhirUrl, kontext, refreshToken, clientSecret)
     }
 
     private fun updateStatusBar(fhirUrl: String, kontext: String, mode: ConnectionMode) {
@@ -257,13 +258,14 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         }
     }
 
-    private fun saveLastConnection(fhirUrl: String, kontext: String, refreshToken: String?) {
+    private fun saveLastConnection(fhirUrl: String, kontext: String, refreshToken: String?, clientSecret: String?) {
         try {
             lastConnectionFile.parentFile.mkdirs()
             val props = Properties()
             props.setProperty("fhir.basis.url", fhirUrl)
             props.setProperty("kontext.id", kontext)
             if (!refreshToken.isNullOrBlank()) props.setProperty("refresh.token", refreshToken)
+            if (!clientSecret.isNullOrBlank()) props.setProperty("client.secret", clientSecret)
             lastConnectionFile.outputStream().use {
                 props.store(it, "Letzte Device-Flow-Verbindung (kein Access-Token gespeichert)")
             }
@@ -272,7 +274,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         }
     }
 
-    data class LastConnection(val fhirUrl: String, val kontextId: String, val refreshToken: String?)
+    data class LastConnection(val fhirUrl: String, val kontextId: String, val refreshToken: String?, val clientSecret: String?)
 
     private fun loadLastConnection(): LastConnection? {
         if (!lastConnectionFile.exists()) return null
@@ -284,7 +286,8 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             else LastConnection(
                 fhirUrl = url,
                 kontextId = props.getProperty("kontext.id", ""),
-                refreshToken = props.getProperty("refresh.token")?.takeIf { it.isNotBlank() }
+                refreshToken = props.getProperty("refresh.token")?.takeIf { it.isNotBlank() },
+                clientSecret = props.getProperty("client.secret")?.takeIf { it.isNotBlank() }
             )
         } catch (e: Exception) {
             logger.warn("Letzte Verbindung konnte nicht geladen werden: {}", e.message)
@@ -299,30 +302,36 @@ class DemoApp : JFrame("T2demo Custom URL App") {
     fun tryAutoReconnect() {
         val lastConn = loadLastConnection() ?: return
         val refreshToken = lastConn.refreshToken ?: return
+        val clientSecret = lastConn.clientSecret ?: run {
+            log("Kein Client Secret gespeichert — Device Flow Dialog wird geöffnet...")
+            showDeviceFlowMode()
+            return
+        }
 
         log("Gespeicherte Verbindung gefunden — versuche automatische Wiederverbindung...")
         executor.execute {
             try {
-                val config = DeviceFlowConfig.fromFhirUrl(lastConn.fhirUrl)
+                val config = DeviceFlowConfig.fromFhirUrl(lastConn.fhirUrl, clientSecret)
                 val service = deviceflow.DeviceFlowService(config)
                 val newAccessToken = service.refreshAccessToken(refreshToken)
                 if (newAccessToken != null) {
                     SwingUtilities.invokeLater {
                         initializeFhirService(lastConn.fhirUrl, lastConn.kontextId, newAccessToken,
-                            ConnectionMode.DEVICE_FLOW, refreshToken)
+                            ConnectionMode.DEVICE_FLOW, refreshToken, clientSecret)
                         log("Automatische Wiederverbindung erfolgreich.")
                     }
                 } else {
                     SwingUtilities.invokeLater {
-                        log("Refresh Token abgelaufen — bitte erneut per Device Flow anmelden.")
-                        // Gespeicherten (ungültigen) Token löschen
-                        saveLastConnection(lastConn.fhirUrl, lastConn.kontextId, null)
+                        log("Refresh Token abgelaufen — Device Flow Dialog wird geöffnet...")
+                        saveLastConnection(lastConn.fhirUrl, lastConn.kontextId, null, null)
+                        showDeviceFlowMode()
                     }
                 }
             } catch (e: Exception) {
                 logger.warn("Automatische Wiederverbindung fehlgeschlagen: {}", e.message)
                 SwingUtilities.invokeLater {
-                    log("Automatische Wiederverbindung fehlgeschlagen: ${e.message}")
+                    log("Wiederverbindung fehlgeschlagen (${e.message}) — Device Flow Dialog wird geöffnet...")
+                    showDeviceFlowMode()
                 }
             }
         }
@@ -338,9 +347,9 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             initialConfig = effectiveConfig,
             initialFhirUrl = initialFhirUrl,
             initialKontextId = initialKontext
-        ) { fhirUrl, kontext, token, refreshToken ->
+        ) { fhirUrl, kontext, token, refreshToken, clientSecret ->
             SwingUtilities.invokeLater {
-                initializeFhirService(fhirUrl, kontext, token, ConnectionMode.DEVICE_FLOW, refreshToken)
+                initializeFhirService(fhirUrl, kontext, token, ConnectionMode.DEVICE_FLOW, refreshToken, clientSecret)
                 dialog.dispose()
             }
         }
