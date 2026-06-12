@@ -49,4 +49,7 @@ object AppConstants {
     const val QUERY_PARAM_DEVICE_AUTH_URL = "deviceAuthUrl"
     const val QUERY_PARAM_TOKEN_URL = "tokenUrl"
     const val QUERY_PARAM_CLIENT_ID = "clientId"
+
+    // t2med-auth server default port (same host as APS)
+    const val AUTH_SERVER_PORT = 16596
 }

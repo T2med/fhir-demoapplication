@@ -1,5 +1,6 @@
 package deviceflow
 
+import constants.AppConstants
 import java.util.Properties
 
 data class DeviceFlowConfig(
@@ -29,9 +30,22 @@ data class DeviceFlowConfig(
 
         fun fromDeepLinkParams(params: Map<String, String>): DeviceFlowConfig {
             val base = load()
+            // Derive auth server base URL from fhirBasisUrl (same host, auth port 16596)
+            val derivedAuthBase = params["fhirBasisUrl"]
+                ?.takeIf { it.isNotBlank() }
+                ?.let { fhirUrl ->
+                    runCatching {
+                        val uri = java.net.URI(fhirUrl)
+                        "${uri.scheme}://${uri.host}:${AppConstants.AUTH_SERVER_PORT}"
+                    }.getOrNull()
+                }
             return DeviceFlowConfig(
-                deviceAuthUrl = params["deviceAuthUrl"]?.takeIf { it.isNotBlank() } ?: base.deviceAuthUrl,
-                tokenUrl = params["tokenUrl"]?.takeIf { it.isNotBlank() } ?: base.tokenUrl,
+                deviceAuthUrl = params["deviceAuthUrl"]?.takeIf { it.isNotBlank() }
+                    ?: derivedAuthBase?.let { "$it/oauth2/device_authorization" }
+                    ?: base.deviceAuthUrl,
+                tokenUrl = params["tokenUrl"]?.takeIf { it.isNotBlank() }
+                    ?: derivedAuthBase?.let { "$it/oauth2/token" }
+                    ?: base.tokenUrl,
                 clientId = params["clientId"]?.takeIf { it.isNotBlank() } ?: base.clientId,
                 scope = base.scope
             )

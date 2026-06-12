@@ -58,4 +58,24 @@ class DeviceFlowConfigTest {
         val fromParams = DeviceFlowConfig.fromDeepLinkParams(mapOf("clientId" to "id"))
         assertEquals("", fromParams.clientSecret)
     }
+
+    @Test
+    fun `fromDeepLinkParams derives auth URLs from fhirBasisUrl`() {
+        val params = mapOf("fhirBasisUrl" to "https://10.42.12.83:16567/aps/fhir/api")
+        val config = DeviceFlowConfig.fromDeepLinkParams(params)
+        assertEquals("https://10.42.12.83:16596/oauth2/device_authorization", config.deviceAuthUrl)
+        assertEquals("https://10.42.12.83:16596/oauth2/token", config.tokenUrl)
+    }
+
+    @Test
+    fun `fromDeepLinkParams explicit deviceAuthUrl takes precedence over fhirBasisUrl`() {
+        val params = mapOf(
+            "fhirBasisUrl" to "https://10.42.12.83:16567/aps/fhir/api",
+            "deviceAuthUrl" to "https://other-server/device_authorization"
+        )
+        val config = DeviceFlowConfig.fromDeepLinkParams(params)
+        assertEquals("https://other-server/device_authorization", config.deviceAuthUrl)
+        // tokenUrl still derived from fhirBasisUrl since not explicitly set
+        assertEquals("https://10.42.12.83:16596/oauth2/token", config.tokenUrl)
+    }
 }
