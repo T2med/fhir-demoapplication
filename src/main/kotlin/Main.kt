@@ -316,6 +316,12 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                 val newAccessToken = service.refreshAccessToken(refreshToken)
                 if (newAccessToken != null) {
                     SwingUtilities.invokeLater {
+                        // Deep-Link hat Vorrang: wenn zwischenzeitlich ein oAuthToken per Deep Link
+                        // ankam, nicht überschreiben (Race zwischen URL-Handler und Reconnect-Thread)
+                        if (oAuthToken != null) {
+                            log("Deep-Link-Verbindung bereits aktiv — automatische Wiederverbindung übersprungen.")
+                            return@invokeLater
+                        }
                         initializeFhirService(lastConn.fhirUrl, lastConn.kontextId, newAccessToken,
                             ConnectionMode.DEVICE_FLOW, refreshToken, clientSecret)
                         log("Automatische Wiederverbindung erfolgreich.")
