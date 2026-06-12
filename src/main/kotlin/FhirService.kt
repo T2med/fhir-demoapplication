@@ -71,7 +71,7 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
 
         override fun interceptResponse(theResponse: IHttpResponse) {
-            lastWwwAuthenticate = theResponse.getAllHeaders()["WWW-Authenticate"]?.firstOrNull()
+            lastWwwAuthenticate = theResponse.getHeaders("WWW-Authenticate").firstOrNull()
         }
     }
 
