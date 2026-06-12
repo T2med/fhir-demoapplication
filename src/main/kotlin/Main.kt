@@ -5,13 +5,17 @@ import deviceflow.DeviceFlowPanel
 import org.hl7.fhir.r4.model.*
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Font
+import java.io.File
 import java.net.URI
 import java.net.URLDecoder
 import java.util.*
 import java.util.concurrent.Executors
 import javax.swing.*
 import javax.swing.table.DefaultTableModel
+
+enum class ConnectionMode { DEEP_LINK, DEVICE_FLOW }
 
 fun main(args: Array<String>) {
     // Windows-Protokoll-Registrierung (im User-Kontext HKCU)
@@ -61,6 +65,13 @@ class DemoApp : JFrame("T2demo Custom URL App") {
 
     // Accumulates deep-link params for Device Flow pre-fill
     private val deepLinkParams = mutableMapOf<String, String>()
+
+    // Statusleiste
+    private val statusModeLabel  = JLabel("Nicht verbunden")
+    private val statusFhirLabel  = JTextField("–").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val statusKontextLabel = JTextField("–").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+
+    private val lastConnectionFile = File(System.getProperty("user.home"), ".t2demo/last-connection.properties")
 
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
@@ -179,7 +190,23 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         centerPanel.add(apiTestPanel, BorderLayout.CENTER)
         
         mainPanel.add(centerPanel, BorderLayout.CENTER)
-        
+
+        // Statusleiste
+        val statusPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 4))
+        statusPanel.border = BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
+            BorderFactory.createEmptyBorder(2, 4, 2, 4)
+        )
+        statusModeLabel.font = Font("Arial", Font.BOLD, 12)
+        statusPanel.add(statusModeLabel)
+        statusPanel.add(JSeparator(JSeparator.VERTICAL).apply { preferredSize = java.awt.Dimension(2, 16) })
+        statusPanel.add(JLabel("FHIR:"))
+        statusPanel.add(statusFhirLabel)
+        statusPanel.add(JSeparator(JSeparator.VERTICAL).apply { preferredSize = java.awt.Dimension(2, 16) })
+        statusPanel.add(JLabel("Kontext:"))
+        statusPanel.add(statusKontextLabel)
+        mainPanel.add(statusPanel, BorderLayout.SOUTH)
+
         add(mainPanel)
         
         // Logger Helper
@@ -197,25 +224,76 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         logFunc?.invoke(msg)
     }
 
-    fun initializeFhirService(fhirUrl: String, kontext: String, accessToken: String) {
+    fun initializeFhirService(fhirUrl: String, kontext: String, accessToken: String,
+                               mode: ConnectionMode = ConnectionMode.DEEP_LINK) {
         fhirBasisUrl = fhirUrl
         kontextId = kontext
         oAuthToken = accessToken
         fhirService = FhirService(fhirUrl, AppConstants.API_KEY, accessToken)
-        log("FHIR-Service initialisiert für $fhirUrl")
-        logger.info("FHIR-Service initialisiert für {}", fhirUrl)
+        log("FHIR-Service initialisiert für $fhirUrl (Modus: $mode)")
+        logger.info("FHIR-Service initialisiert für {} (Modus: {})", fhirUrl, mode)
+        updateStatusBar(fhirUrl, kontext, mode)
+        if (mode == ConnectionMode.DEVICE_FLOW) saveLastConnection(fhirUrl, kontext)
+    }
+
+    private fun updateStatusBar(fhirUrl: String, kontext: String, mode: ConnectionMode) {
+        SwingUtilities.invokeLater {
+            when (mode) {
+                ConnectionMode.DEVICE_FLOW -> {
+                    statusModeLabel.text = "● Device Flow"
+                    statusModeLabel.foreground = Color(0, 150, 60)
+                }
+                ConnectionMode.DEEP_LINK -> {
+                    statusModeLabel.text = "● Deep Link"
+                    statusModeLabel.foreground = Color(0, 100, 180)
+                }
+            }
+            statusFhirLabel.text = fhirUrl.take(60).let { if (fhirUrl.length > 60) "$it…" else it }
+            statusKontextLabel.text = kontext
+        }
+    }
+
+    private fun saveLastConnection(fhirUrl: String, kontext: String) {
+        try {
+            lastConnectionFile.parentFile.mkdirs()
+            val props = Properties()
+            props.setProperty("fhir.basis.url", fhirUrl)
+            props.setProperty("kontext.id", kontext)
+            lastConnectionFile.outputStream().use {
+                props.store(it, "Letzte Device-Flow-Verbindung (kein Token gespeichert)")
+            }
+        } catch (e: Exception) {
+            logger.warn("Letzte Verbindung konnte nicht gespeichert werden: {}", e.message)
+        }
+    }
+
+    private fun loadLastConnection(): Pair<String, String>? {
+        if (!lastConnectionFile.exists()) return null
+        return try {
+            val props = Properties()
+            lastConnectionFile.inputStream().use { props.load(it) }
+            val url = props.getProperty("fhir.basis.url", "")
+            val kontext = props.getProperty("kontext.id", "")
+            if (url.isNotBlank()) url to kontext else null
+        } catch (e: Exception) {
+            logger.warn("Letzte Verbindung konnte nicht geladen werden: {}", e.message)
+            null
+        }
     }
 
     fun showDeviceFlowMode(config: DeviceFlowConfig? = null) {
         val effectiveConfig = config ?: DeviceFlowConfig.fromDeepLinkParams(deepLinkParams)
+        val lastConn = loadLastConnection()
+        val initialFhirUrl = fhirBasisUrl ?: lastConn?.first ?: ""
+        val initialKontext = kontextId ?: lastConn?.second ?: ""
         val dialog = JDialog(this, "Standalone-Anmeldung (Device Flow)", true)
         val panel = DeviceFlowPanel(
             initialConfig = effectiveConfig,
-            initialFhirUrl = fhirBasisUrl ?: "",
-            initialKontextId = kontextId ?: ""
+            initialFhirUrl = initialFhirUrl,
+            initialKontextId = initialKontext
         ) { fhirUrl, kontext, token ->
             SwingUtilities.invokeLater {
-                initializeFhirService(fhirUrl, kontext, token)
+                initializeFhirService(fhirUrl, kontext, token, ConnectionMode.DEVICE_FLOW)
                 dialog.dispose()
             }
         }
