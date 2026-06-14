@@ -438,7 +438,9 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                     SwingUtilities.invokeLater { log("Update abgebrochen.") }
                     return@execute
                 }
-                val outcome = service.updatePatient(patientId, updateData)
+                // Den beim Dialog-Start gelesenen Patienten (inkl. Version) durchreichen,
+                // nicht erneut lesen — sonst greift das Optimistic Locking nicht.
+                val outcome = service.updatePatient(patient, updateData)
                 SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
             } catch (e: Exception) {
                 SwingUtilities.invokeLater { log("Fehler bei Patient-Update: ${e.message}") }

@@ -397,9 +397,12 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
-    fun updatePatient(patientId: String, data: PatientUpdateData): OperationOutcome {
+    fun updatePatient(patient: Patient, data: PatientUpdateData): OperationOutcome {
         try {
-            val patient = readPatient(patientId)
+            // Wichtig: Es wird KEIN erneuter readPatient() ausgeführt. Der Patient (inkl.
+            // meta.versionId) stammt aus dem Lesezugriff, auf dem die Bearbeitung beruht.
+            // Nur so erkennt das Optimistic Locking konkurrierende Änderungen, die während
+            // der Bearbeitung passiert sind.
 
             // Namensdaten überschreiben
             patient.name.clear()

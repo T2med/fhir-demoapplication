@@ -209,12 +209,10 @@ class FhirServiceTest {
         val mockOutcome = OperationOutcome().apply {
             addIssue().apply { severity = OperationOutcome.IssueSeverity.INFORMATION }
         }
-        val spy = org.mockito.kotlin.spy(fhirService)
-        doReturn(patient).`when`(spy).readPatient("123")
         val mockUpdate = mockUpdate(mockOutcome)
 
         val data = PatientUpdateData("Muster", "Max", "", null, null)
-        val result = spy.updatePatient("123", data)
+        val result = fhirService.updatePatient(patient, data)
 
         assertNotNull(result)
         verify(mockUpdate).resource(argThat<Patient> {
@@ -232,12 +230,10 @@ class FhirServiceTest {
         val mockOutcome = OperationOutcome().apply {
             addIssue().apply { severity = OperationOutcome.IssueSeverity.INFORMATION }
         }
-        val spy = org.mockito.kotlin.spy(fhirService)
-        doReturn(patient).`when`(spy).readPatient("123")
         val mockUpdate = mockUpdate(mockOutcome)
 
         val data = PatientUpdateData("Muster", "Max", "", null, null)
-        val result = spy.updatePatient("123", data)
+        val result = fhirService.updatePatient(patient, data)
 
         assertNotNull(result)
         verify(mockUpdate).resource(argThat<Patient> {
