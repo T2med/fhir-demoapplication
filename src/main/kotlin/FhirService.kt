@@ -420,6 +420,13 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
             // damit der APS-Server sie von UNBEKANNT unterscheiden kann.
             data.geschlecht?.let { g ->
                 patient.gender = g.fhirGender
+                // Vorhandene amtlich-de-Extension(en) immer entfernen, bevor die neue gesetzt
+                // wird. Sonst bleibt beim Wechsel divers→unbestimmt (beide AdministrativeGender.OTHER)
+                // die alte Extension ("D") erhalten und das genderElement trägt zwei widersprüchliche
+                // Extensions — der APS-Server wertet dann die alte aus und die Änderung wirkt nicht.
+                patient.genderElement.extension.removeAll {
+                    it.url == "http://fhir.de/StructureDefinition/gender-amtlich-de"
+                }
                 if (g.amtlichCode != null) {
                     patient.genderElement.addExtension(
                         Extension(
