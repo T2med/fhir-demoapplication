@@ -47,12 +47,20 @@ Das **Access-Token wird nicht persistiert**, das **Client-Secret und der Refresh
 
 Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 
-- Patient über Kontext-Identifier suchen
-- Patient per Name, Vorname und Geburtsdatum suchen
-- `Observation` mit Profil `Befund` anlegen
-- `Condition` für eine Diagnose anlegen
-- `Procedure` mit Profil `Therapie` anlegen
-- `DocumentReference` für Freitext anlegen
+- `Patient (Kontext) suchen` — Patient über Kontext-Identifier suchen
+- `Patient (Name) suchen` — Patient per Name, Vorname und Geburtsdatum suchen
+- `Patient anlegen`
+- `Patient aktualisieren`
+- `Observation (Befund) anlegen`
+- `Befund anlegen` — Custom-Ressource `Befund`
+- `Condition (Diagnose) anlegen`
+- `Procedure (Therapie) anlegen`
+- `DocumentRef anlegen` — `DocumentReference` für Freitext
+- `Dokument hochladen` — `DocumentReference` mit eingebettetem Datei-Anhang
+- `Encounter lesen`
+- `Organisation suchen`
+- `Practitioner suchen`
+- `Transaktion (Obs+Cond)` — FHIR-Transaction-Bundle mit `Observation` und `Condition`
 
 ## Technischer Ablauf
 
