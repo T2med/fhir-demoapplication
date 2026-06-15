@@ -2,6 +2,8 @@ import ca.uhn.fhir.context.FhirContext
 import ca.uhn.fhir.rest.client.api.IGenericClient
 import ca.uhn.fhir.rest.client.api.IRestfulClientFactory
 import ca.uhn.fhir.rest.gclient.*
+import ca.uhn.fhir.rest.gclient.IUpdate
+import ca.uhn.fhir.rest.gclient.IUpdateTyped
 import org.hl7.fhir.r4.model.*
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -181,6 +183,62 @@ class FhirServiceTest {
         verify(mockSearchForPatient).where(argThat<ICriterion<*>> { true })
         verify(mockSearchWhere1).and(argThat<ICriterion<*>> { true })
         verify(mockSearchAnd1).and(argThat<ICriterion<*>> { true })
+    }
+
+    private fun mockUpdate(outcome: OperationOutcome): IUpdate {
+        val mockUpdate = mock<IUpdate>()
+        val mockUpdateTyped = mock<IUpdateTyped>()
+        val mockUpdateWithHeader = mock<IUpdateTyped>()
+        val mockMethodOutcome = mock<ca.uhn.fhir.rest.api.MethodOutcome>()
+        whenever(mockClient.update()).thenReturn(mockUpdate)
+        whenever(mockUpdate.resource(any<Patient>())).thenReturn(mockUpdateTyped)
+        whenever(mockUpdateTyped.withAdditionalHeader(any(), any())).thenReturn(mockUpdateWithHeader)
+        whenever(mockUpdateWithHeader.execute()).thenReturn(mockMethodOutcome)
+        whenever(mockMethodOutcome.operationOutcome).thenReturn(outcome)
+        return mockUpdate
+    }
+
+    @Test
+    fun `test updatePatient sets versionId in idElement for optimistic locking`() {
+        // meta.versionId liefert laut Leitfaden den vollen Pfad, nicht nur die kurze Nummer
+        val patient = Patient().apply {
+            id = "Patient/123"
+            meta = Meta().apply { versionId = "123/_history/4" }
+            addName().apply { family = "Muster"; addGiven("Max") }
+        }
+        val mockOutcome = OperationOutcome().apply {
+            addIssue().apply { severity = OperationOutcome.IssueSeverity.INFORMATION }
+        }
+        val mockUpdate = mockUpdate(mockOutcome)
+
+        val data = PatientUpdateData("Muster", "Max", "", null, null)
+        val result = fhirService.updatePatient(patient, data)
+
+        assertNotNull(result)
+        verify(mockUpdate).resource(argThat<Patient> {
+            this.idElement.versionIdPart == "4"
+        })
+    }
+
+    @Test
+    fun `test updatePatient without versionId falls back to versionless PUT`() {
+        val patient = Patient().apply {
+            id = "Patient/123"
+            // kein meta.versionId → Fallback auf versionslosen PUT
+            addName().apply { family = "Muster"; addGiven("Max") }
+        }
+        val mockOutcome = OperationOutcome().apply {
+            addIssue().apply { severity = OperationOutcome.IssueSeverity.INFORMATION }
+        }
+        val mockUpdate = mockUpdate(mockOutcome)
+
+        val data = PatientUpdateData("Muster", "Max", "", null, null)
+        val result = fhirService.updatePatient(patient, data)
+
+        assertNotNull(result)
+        verify(mockUpdate).resource(argThat<Patient> {
+            this.idElement.versionIdPart == null
+        })
     }
 
     @Test

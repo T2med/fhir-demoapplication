@@ -400,9 +400,12 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
         }
     }
 
-    fun updatePatient(patientId: String, data: PatientUpdateData): OperationOutcome {
+    fun updatePatient(patient: Patient, data: PatientUpdateData): OperationOutcome {
         try {
-            val patient = readPatient(patientId)
+            // Wichtig: Es wird KEIN erneuter readPatient() ausgeführt. Der Patient (inkl.
+            // meta.versionId) stammt aus dem Lesezugriff, auf dem die Bearbeitung beruht.
+            // Nur so erkennt das Optimistic Locking konkurrierende Änderungen, die während
+            // der Bearbeitung passiert sind.
 
             // Namensdaten überschreiben
             patient.name.clear()
@@ -439,11 +442,20 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
                 }
             }
 
-            // Version aus der ID entfernen: PUT /Patient/{id} statt /_history/{version}
-            // Der APS-Server löst bei /_history/-URL einen Versionskonflikt-Check aus (409),
-            // ohne Version-Suffix wird dieser Check übersprungen.
-            patient.setId(patient.idElement.toUnqualifiedVersionless())
-            val result = client.update().resource(patient).execute()
+            // meta.versionId liefert den vollen Pfad "{id}/_history/{version}" —
+            // daraus nur die kurze Versionsnummer extrahieren, damit HAPI FHIR
+            // automatisch If-Match: W/"<version>" mitsendet → Optimistic Locking aktiv.
+            // Ohne versionId (sollte nicht vorkommen) Fallback auf versionslosen PUT.
+            val version = patient.meta?.versionId?.let { IdType(it).versionIdPart }
+            if (version != null) {
+                patient.idElement = IdType("Patient", patient.idElement.idPart, version)
+            } else {
+                patient.setId(patient.idElement.toUnqualifiedVersionless())
+            }
+            val result = client.update()
+                .resource(patient)
+                .withAdditionalHeader(FhirConstants.HEADER_X_FHIR_PROFILE, FhirConstants.PROFILE_PATIENT)
+                .execute()
             return result.operationOutcome as OperationOutcome
         } catch (e: Exception) {
             throw wrapExceptionWithUrl(e, "updatePatient")
