@@ -1,15 +1,21 @@
 import constants.AppConstants
 import constants.FhirConstants
+import deviceflow.DeviceFlowConfig
+import deviceflow.DeviceFlowPanel
 import org.hl7.fhir.r4.model.*
 import org.slf4j.LoggerFactory
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.Font
+import java.io.File
 import java.net.URI
 import java.net.URLDecoder
 import java.util.*
 import java.util.concurrent.Executors
 import javax.swing.*
 import javax.swing.table.DefaultTableModel
+
+enum class ConnectionMode { DEEP_LINK, DEVICE_FLOW }
 
 fun main(args: Array<String>) {
     // Windows-Protokoll-Registrierung (im User-Kontext HKCU)
@@ -22,6 +28,9 @@ fun main(args: Array<String>) {
         // Wenn die URL als Argument übergeben wurde
         if (args.isNotEmpty()) {
             app.handleUrl(args[0])
+        } else {
+            // Ohne Deep-Link: gespeicherte Device-Flow-Verbindung automatisch wiederherstellen
+            app.tryAutoReconnect()
         }
 
         // Desktop-Integration für macOS URL Handler
@@ -57,6 +66,16 @@ class DemoApp : JFrame("T2demo Custom URL App") {
     private var oAuthToken: String? = null
     private var fhirService: FhirService? = null
 
+    // Accumulates deep-link params for Device Flow pre-fill
+    private val deepLinkParams = mutableMapOf<String, String>()
+
+    // Statusleiste
+    private val statusModeLabel  = JLabel("Nicht verbunden")
+    private val statusFhirLabel  = JTextField("–").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+    private val statusKontextLabel = JTextField("–").apply { isEditable = false; border = null; background = UIManager.getColor("Panel.background") }
+
+    private val lastConnectionFile = File(System.getProperty("user.home"), ".t2demo/last-connection.properties")
+
     init {
         defaultCloseOperation = EXIT_ON_CLOSE
         setSize(950, 780)
@@ -65,10 +84,15 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         val mainPanel = JPanel(BorderLayout(10, 10))
         mainPanel.border = BorderFactory.createEmptyBorder(10, 10, 10, 10)
         
-        // Titelbereich
+        // Titelbereich mit Device-Flow-Button
+        val titlePanel = JPanel(BorderLayout(10, 0))
         val titleLabel = JLabel("T2demo FHIR API Demo", JLabel.CENTER)
         titleLabel.font = Font("Arial", Font.BOLD, 20)
-        mainPanel.add(titleLabel, BorderLayout.NORTH)
+        val btnDeviceFlow = JButton("Standalone-Anmeldung (Device Flow)")
+        btnDeviceFlow.addActionListener { showDeviceFlowMode() }
+        titlePanel.add(titleLabel, BorderLayout.CENTER)
+        titlePanel.add(btnDeviceFlow, BorderLayout.EAST)
+        mainPanel.add(titlePanel, BorderLayout.NORTH)
 
         // Center SplitPane: URL Details oben, API Tests unten
         val centerPanel = JPanel(BorderLayout(0, 10))
@@ -169,7 +193,23 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         centerPanel.add(apiTestPanel, BorderLayout.CENTER)
         
         mainPanel.add(centerPanel, BorderLayout.CENTER)
-        
+
+        // Statusleiste
+        val statusPanel = JPanel(java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 8, 4))
+        statusPanel.border = BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY),
+            BorderFactory.createEmptyBorder(2, 4, 2, 4)
+        )
+        statusModeLabel.font = Font("Arial", Font.BOLD, 12)
+        statusPanel.add(statusModeLabel)
+        statusPanel.add(JSeparator(JSeparator.VERTICAL).apply { preferredSize = java.awt.Dimension(2, 16) })
+        statusPanel.add(JLabel("FHIR:"))
+        statusPanel.add(statusFhirLabel)
+        statusPanel.add(JSeparator(JSeparator.VERTICAL).apply { preferredSize = java.awt.Dimension(2, 16) })
+        statusPanel.add(JLabel("Kontext:"))
+        statusPanel.add(statusKontextLabel)
+        mainPanel.add(statusPanel, BorderLayout.SOUTH)
+
         add(mainPanel)
         
         // Logger Helper
@@ -185,6 +225,146 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         @Suppress("UNCHECKED_CAST")
         val logFunc = rootPane.getClientProperty("logFunc") as? (String) -> Unit
         logFunc?.invoke(msg)
+    }
+
+    fun initializeFhirService(fhirUrl: String, kontext: String, accessToken: String,
+                               mode: ConnectionMode = ConnectionMode.DEEP_LINK,
+                               refreshToken: String? = null,
+                               clientSecret: String? = null) {
+        fhirBasisUrl = fhirUrl
+        kontextId = kontext
+        oAuthToken = accessToken
+        fhirService = FhirService(fhirUrl, AppConstants.API_KEY, accessToken)
+        log("FHIR-Service initialisiert für $fhirUrl (Modus: $mode)")
+        logger.info("FHIR-Service initialisiert für {} (Modus: {})", fhirUrl, mode)
+        updateStatusBar(fhirUrl, kontext, mode)
+        if (mode == ConnectionMode.DEVICE_FLOW) saveLastConnection(fhirUrl, kontext, refreshToken, clientSecret)
+    }
+
+    private fun updateStatusBar(fhirUrl: String, kontext: String, mode: ConnectionMode) {
+        SwingUtilities.invokeLater {
+            when (mode) {
+                ConnectionMode.DEVICE_FLOW -> {
+                    statusModeLabel.text = "● Device Flow"
+                    statusModeLabel.foreground = Color(0, 150, 60)
+                }
+                ConnectionMode.DEEP_LINK -> {
+                    statusModeLabel.text = "● Deep Link"
+                    statusModeLabel.foreground = Color(0, 100, 180)
+                }
+            }
+            statusFhirLabel.text = fhirUrl.take(60).let { if (fhirUrl.length > 60) "$it…" else it }
+            statusKontextLabel.text = kontext
+        }
+    }
+
+    private fun saveLastConnection(fhirUrl: String, kontext: String, refreshToken: String?, clientSecret: String?) {
+        try {
+            lastConnectionFile.parentFile.mkdirs()
+            val props = Properties()
+            props.setProperty("fhir.basis.url", fhirUrl)
+            props.setProperty("kontext.id", kontext)
+            if (!refreshToken.isNullOrBlank()) props.setProperty("refresh.token", refreshToken)
+            if (!clientSecret.isNullOrBlank()) props.setProperty("client.secret", clientSecret)
+            lastConnectionFile.outputStream().use {
+                props.store(it, "Letzte Device-Flow-Verbindung (kein Access-Token gespeichert)")
+            }
+        } catch (e: Exception) {
+            logger.warn("Letzte Verbindung konnte nicht gespeichert werden: {}", e.message)
+        }
+    }
+
+    data class LastConnection(val fhirUrl: String, val kontextId: String, val refreshToken: String?, val clientSecret: String?)
+
+    private fun loadLastConnection(): LastConnection? {
+        if (!lastConnectionFile.exists()) return null
+        return try {
+            val props = Properties()
+            lastConnectionFile.inputStream().use { props.load(it) }
+            val url = props.getProperty("fhir.basis.url", "")
+            if (url.isBlank()) null
+            else LastConnection(
+                fhirUrl = url,
+                kontextId = props.getProperty("kontext.id", ""),
+                refreshToken = props.getProperty("refresh.token")?.takeIf { it.isNotBlank() },
+                clientSecret = props.getProperty("client.secret")?.takeIf { it.isNotBlank() }
+            )
+        } catch (e: Exception) {
+            logger.warn("Letzte Verbindung konnte nicht geladen werden: {}", e.message)
+            null
+        }
+    }
+
+    /**
+     * Versucht beim Start der App, die letzte Device-Flow-Verbindung per Refresh Token
+     * automatisch wiederherzustellen — ohne erneute Browser-Autorisierung.
+     */
+    fun tryAutoReconnect() {
+        val lastConn = loadLastConnection() ?: return
+        val refreshToken = lastConn.refreshToken ?: return
+        val clientSecret = lastConn.clientSecret ?: run {
+            log("Kein Client Secret gespeichert — Device Flow Dialog wird geöffnet...")
+            showDeviceFlowMode()
+            return
+        }
+
+        log("Gespeicherte Verbindung gefunden — versuche automatische Wiederverbindung...")
+        executor.execute {
+            try {
+                val config = DeviceFlowConfig.fromFhirUrl(lastConn.fhirUrl, clientSecret)
+                val service = deviceflow.DeviceFlowService(config)
+                val newAccessToken = service.refreshAccessToken(refreshToken)
+                if (newAccessToken != null) {
+                    SwingUtilities.invokeLater {
+                        // Deep-Link hat Vorrang: wenn zwischenzeitlich ein oAuthToken per Deep Link
+                        // ankam, nicht überschreiben (Race zwischen URL-Handler und Reconnect-Thread)
+                        if (oAuthToken != null) {
+                            log("Deep-Link-Verbindung bereits aktiv — automatische Wiederverbindung übersprungen.")
+                            return@invokeLater
+                        }
+                        initializeFhirService(lastConn.fhirUrl, lastConn.kontextId, newAccessToken,
+                            ConnectionMode.DEVICE_FLOW, refreshToken, clientSecret)
+                        log("Automatische Wiederverbindung erfolgreich.")
+                    }
+                } else {
+                    SwingUtilities.invokeLater {
+                        log("Refresh Token abgelaufen — Device Flow Dialog wird geöffnet...")
+                        saveLastConnection(lastConn.fhirUrl, lastConn.kontextId, null, null)
+                        showDeviceFlowMode()
+                    }
+                }
+            } catch (e: Exception) {
+                logger.warn("Automatische Wiederverbindung fehlgeschlagen: {}", e.message)
+                SwingUtilities.invokeLater {
+                    log("Wiederverbindung fehlgeschlagen (${e.message}) — Device Flow Dialog wird geöffnet...")
+                    showDeviceFlowMode()
+                }
+            }
+        }
+    }
+
+    fun showDeviceFlowMode(config: DeviceFlowConfig? = null) {
+        val effectiveConfig = config ?: DeviceFlowConfig.fromDeepLinkParams(deepLinkParams)
+        val lastConn = loadLastConnection()
+        val initialFhirUrl = fhirBasisUrl ?: lastConn?.fhirUrl ?: ""
+        val initialKontext = kontextId ?: lastConn?.kontextId ?: ""
+        val dialog = JDialog(this, "Standalone-Anmeldung (Device Flow)", true)
+        val panel = DeviceFlowPanel(
+            initialConfig = effectiveConfig,
+            initialFhirUrl = initialFhirUrl,
+            initialKontextId = initialKontext
+        ) { fhirUrl, kontext, token, refreshToken, clientSecret ->
+            SwingUtilities.invokeLater {
+                initializeFhirService(fhirUrl, kontext, token, ConnectionMode.DEVICE_FLOW, refreshToken, clientSecret)
+                dialog.dispose()
+            }
+        }
+        dialog.defaultCloseOperation = JDialog.DISPOSE_ON_CLOSE
+        dialog.contentPane = panel
+        dialog.pack()
+        dialog.setSize(560, dialog.height.coerceAtLeast(480))
+        dialog.setLocationRelativeTo(this)
+        dialog.isVisible = true
     }
 
     private fun testSearchPatient() {
@@ -587,6 +767,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         urlLabel.text = url
         urlLabel.caretPosition = 0
         tableModel.rowCount = 0
+        deepLinkParams.clear()
 
         try {
             val uri = URI(url)
@@ -602,8 +783,8 @@ class DemoApp : JFrame("T2demo Custom URL App") {
                     val key = URLDecoder.decode(pair[0], "UTF-8")
                     val value = if (pair.size > 1) URLDecoder.decode(pair[1], "UTF-8") else ""
                     tableModel.addRow(arrayOf(key, value))
+                    deepLinkParams[key] = value
 
-                    // FHIR relevante Parameter extrahieren
                     when (key) {
                         AppConstants.QUERY_PARAM_KONTEXT_ID -> kontextId = value
                         AppConstants.QUERY_PARAM_FHIR_BASIS_URL -> fhirBasisUrl = value
@@ -613,9 +794,7 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             }
 
             if (fhirBasisUrl != null && oAuthToken != null) {
-                fhirService = FhirService(fhirBasisUrl!!, "7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE", oAuthToken!!)
-                log("FHIR-Service initialisiert für $fhirBasisUrl")
-                logger.info("FHIR-Service initialisiert für {}", fhirBasisUrl)
+                initializeFhirService(fhirBasisUrl!!, kontextId ?: "", oAuthToken!!)
             } else {
                 log("FHIR-Service konnte nicht initialisiert werden (fhirBasisUrl oder oAuthToken fehlt)")
             }

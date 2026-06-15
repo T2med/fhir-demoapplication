@@ -36,9 +36,16 @@ object AppConstants {
     // Logging and Error Messages
     const val ERROR_KONTEXT_ID_MISSING = "Fehler: Keine kontextId vorhanden"
     const val ERROR_FHIR_SERVICE_NOT_INITIALIZED = "Fehler: FhirService nicht initialisiert"
-    
-    // Query Parameters
+
+    // API Key (test/demo only — not a secret)
+    const val API_KEY = "7QwA7931lJSQfMKuTH4MQXLn4YEiNhE5tggnYKlY4HE"
+
+    // Query Parameters — Deep Link (classic)
     const val QUERY_PARAM_KONTEXT_ID = "kontextId"
     const val QUERY_PARAM_FHIR_BASIS_URL = "fhirBasisUrl"
     const val QUERY_PARAM_OAUTH_TOKEN = "oAuthToken"
+
+
+    // t2med-auth server default port (same host as APS)
+    const val AUTH_SERVER_PORT = 16596
 }
