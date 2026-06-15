@@ -19,7 +19,7 @@ Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Paramete
 Beispiel:
 
 ```text
-T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=<OAUTH_TOKEN>
+T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi%2Fr4&oAuthToken=<OAUTH_TOKEN>
 ```
 
 ### OAuth Device Flow (Standalone-Anmeldung)
@@ -50,7 +50,7 @@ Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 1. APS startet den Drittanbieter über einen Deep Link.
 2. Die Demo extrahiert `kontextId`, `fhirBasisUrl` und `oAuthToken`.
 3. Für `https://`-Basis-URLs wird ein eigener HTTP-/SSL-Client konfiguriert, der auch installationsspezifische lokale Zertifikate akzeptiert.
-4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api`.
+4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api/r4`.
 5. Kontextgebundene Ressourcen erhalten automatisch den Identifier `https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`.
 
 ### Startpfad 2: OAuth Device Flow
@@ -67,6 +67,7 @@ Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 
 Die Demo setzt für Requests diese Header:
 
+- `Content-Type: application/fhir+xml; charset=UTF-8`
 - `Authorization: Bearer <oAuthToken>`
 - `Prefer: return=OperationOutcome`
 - `X-API-Key: <API_KEY>`
@@ -131,7 +132,7 @@ Der Standard-Testlauf enthält nur die CI-tauglichen Unit- und SSL-Tests.
 ### Integrationstests gezielt ausführen
 
 ```bash
-export FHIR_BASE_URL=https://127.0.0.1:16567/aps/fhir/api
+export FHIR_BASE_URL=https://127.0.0.1:16567/aps/fhir/api/r4
 export FHIR_KONTEXT_ID=<KONTEXT_ID>
 export FHIR_OAUTH_TOKEN=<OAUTH_TOKEN>
 ./gradlew integrationTest
@@ -166,7 +167,7 @@ Das URL-Scheme `T2demo://` ist in der Vorlage [src/main/resources/macos/Info.pli
 Test:
 
 ```bash
-open "T2demo://demo/start?kontextId=test&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=test-token"
+open "T2demo://demo/start?kontextId=test&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi%2Fr4&oAuthToken=test-token"
 ```
 
 ### Windows
