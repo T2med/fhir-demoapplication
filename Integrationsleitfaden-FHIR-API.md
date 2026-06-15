@@ -29,24 +29,25 @@ Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token kann sich ein Dr
 ### Ablauf
 
 ```
-Drittanbieter-Client            Auth-Server                       Browser (Nutzer)
-      |                              |                                   |
-      |-- POST /device_authorization -->|                                |
-      |<-- device_code, user_code, ------|                               |
-      |    verification_uri_complete,    |                               |
-      |    expires_in, interval          |                               |
-      |                              |                                   |
-      |  zeigt user_code + URI ------>|                               Nutzer öffnet URI
-      |                              |<---- Nutzer gibt user_code ein ---|
-      |                              |                                   |
-      |-- POST /token (polling) ----->|                                  |
-      |   (Authorization: Basic, grant_type=urn:ietf:params:oauth:...)  |
-      |<-- authorization_pending -----| (Nutzer noch nicht autorisiert) |
-      |   (warten, erneut pollen)    |                                   |
-      |-- POST /token (polling) ----->|                                  |
-      |<-- access_token, token_type --|  (Nutzer hat autorisiert)        |
-      |                              |                                   |
-      | FHIR-Client initialisiert    |                                   |
+Drittanbieter-Client                   Auth-Server                          Browser (Nutzer)
+        |                                   |                                       |
+        |-- POST /device_authorization ---->|                                       |
+        |<-- device_code, user_code, -------|                                       |
+        |  verification_uri_complete,       |                                       |
+        |  expires_in, interval             |                                       |
+        |                                   |                                       |
+        |  zeigt user_code + URI -------------------------------------------------->| Nutzer öffnet URI
+        |                                   |<-- Nutzer gibt user_code ein ---------|
+        |                                   |                                       |
+        |-- POST /token (polling) --------->|                                       |
+        |  Authorization: Basic,            |                                       |
+        |  grant_type=device_code           |                                       |
+        |<-- authorization_pending ---------|                                       |
+        |  (warten, erneut pollen)          |                                       |
+        |-- POST /token (polling) --------->|                                       |
+        |<-- access_token, token_type ------|                                       |
+        |                                   |                                       |
+        |  FHIR-Client initialisiert        |                                       |
 ```
 
 ### Konfigurationsparameter
