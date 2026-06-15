@@ -32,6 +32,7 @@ Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token kann sich ein Dr
 Drittanbieter-Client                   Auth-Server                          Browser (Nutzer)
         |                                   |                                       |
         |-- POST /device_authorization ---->|                                       |
+        |  Authorization: Basic             |                                       |
         |<-- device_code, user_code, -------|                                       |
         |  verification_uri_complete,       |                                       |
         |  expires_in, interval             |                                       |
@@ -61,6 +62,8 @@ Drittanbieter-Client                   Auth-Server                          Brow
 | `scope` | OAuth Scope — aktuell in APS festgelegt: `t2med/aps/fhir`. |
 
 Das Client-Secret wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff bereitgestellt. Der Drittanbieter-Client muss es vertraulich behandeln: nicht protokollieren und nur in einem sicheren Schlüsselspeicher vorhalten (siehe Abschnitt 10).
+
+Die Client-Authentifizierung erfolgt bei **allen** Aufrufen (`device_authorization`, Token-Polling und Refresh) über den Header `Authorization: Basic base64(client_id:client_secret)`. Das Client-Secret gehört **nicht** in den Request-Body — dieser enthält nur `client_id` und `scope` (bzw. beim Token-Aufruf `grant_type` und `device_code`). Wird das Secret im Body mitgesendet, lehnt der Auth-Server den Aufruf mit `{"error":"invalid_client"}` ab.
 
 ### Polling-Verhalten
 
@@ -510,10 +513,14 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 
 ### Variante B: OAuth Device Flow
 
-1. `POST <deviceAuthUrl>` mit `client_id`, `client_secret` und `scope` im Body (Form-Encoded).
+> **Wichtig:** Das Client-Secret wird bei **allen** Aufrufen ausschließlich im Header
+> `Authorization: Basic base64(client_id:client_secret)` übertragen, **niemals** im Request-Body.
+> Wird `client_secret` im Body mitgesendet, antwortet der Auth-Server mit `{"error":"invalid_client"}`.
+
+1. `POST <deviceAuthUrl>` mit Header `Authorization: Basic base64(client_id:client_secret)`; im Body (Form-Encoded) nur `client_id` und `scope`.
 2. `device_code`, `user_code`, `verification_uri_complete` (Fallback: `verification_uri`), `expires_in` und `interval` aus der Response lesen.
 3. `user_code` und `verification_uri_complete` dem Nutzer anzeigen.
-4. Polling: `POST <tokenUrl>` mit `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code`, `client_id`, `client_secret` — alle `interval` Sekunden.
+4. Polling: `POST <tokenUrl>` mit demselben `Authorization: Basic`-Header; im Body `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code` und `client_id` — alle `interval` Sekunden.
 5. Bei `authorization_pending`: warten und erneut pollen. Bei `slow_down`: Intervall um 5 Sekunden erhöhen.
 6. Bei `200 OK` mit `access_token`: Token übernehmen, FHIR-Client wie in Variante A initialisieren.
 7. Ab hier identisch mit Variante A: FHIR-Operationen mit `Authorization: Bearer <access_token>` ausführen.
