@@ -182,7 +182,6 @@ Ressourcen:
 | `GET` | `/Practitioner?name=...&identifier=...` | Practitioner nach Name/LANR suchen |
 | `GET` | `/Organization/{id}/Practitioner` | implementierungsnaher Compartment-Sonderfall; Handler liefert aktuell Organisationen zur übergebenen Arztrollen-ID |
 | `POST` | `/Observation` | Observation anlegen |
-| `POST` | `/Befund` | Custom Resource `Befund` anlegen |
 | `POST` | `/Condition` | Diagnose anlegen |
 | `POST` | `/Procedure` | Therapie oder Prozedere anlegen |
 | `POST` | `/DocumentReference` | Freitext oder Anhang anlegen |
@@ -199,7 +198,6 @@ Profilübersicht:
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` | `create` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund\|1.0.0` | `create` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext\|1.0.0` | `create` |
-| Befund | `https://fhir.t2med.de/StructureDefinition/FhirApiBefund\|1.0.0` | `create` |
 | Condition | `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` | `create` |
@@ -242,7 +240,6 @@ Je nach Anwendungsfall:
 | Ressource | Anwendungsfall |
 | --- | --- |
 | `Observation` | Anamnese, Befund oder Freitext |
-| `Befund` | Custom Befund-Ressource |
 | `Condition` | Diagnosen |
 | `Procedure` | Therapie oder Prozedere |
 | `DocumentReference` | Freitext oder eingebetteter Anhang/Datei-Upload |
@@ -304,7 +301,6 @@ Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt 
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext\|1.0.0` |
-| Befund | `https://fhir.t2med.de/StructureDefinition/FhirApiBefund\|1.0.0` |
 | Condition | `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` |

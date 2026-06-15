@@ -52,7 +52,6 @@ Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 - `Patient anlegen`
 - `Patient aktualisieren`
 - `Observation (Befund) anlegen`
-- `Befund anlegen` — Custom-Ressource `Befund`
 - `Condition (Diagnose) anlegen`
 - `Procedure (Therapie) anlegen`
 - `DocumentRef anlegen` — `DocumentReference` für Freitext

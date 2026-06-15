@@ -1,5 +1,4 @@
 import ca.uhn.fhir.context.FhirContext
-import ca.uhn.fhir.model.api.annotation.ResourceDef
 import ca.uhn.fhir.rest.client.api.IClientInterceptor
 import ca.uhn.fhir.rest.client.api.IHttpRequest
 import ca.uhn.fhir.rest.client.api.IHttpResponse
@@ -46,12 +45,6 @@ data class PatientUpdateData(
     val geschlecht: Geschlecht?,
     val neuesTelecom: TelecomEntry?
 )
-
-/** Lokale Custom-Resource-Klasse analog zu APS FhirApiBefund (erweitert Observation, Ressourcenname "Befund"). */
-@ResourceDef(name = "Befund", profile = FhirConstants.PROFILE_BEFUND)
-class FhirApiBefund : Observation() {
-    override fun fhirType(): String = "Befund"
-}
 
 class FhirService(private val baseUrl: String, private val apiKey: String, private val oAuthToken : String, private val providedCtx: FhirContext? = null) {
     private val logger = LoggerFactory.getLogger(FhirService::class.java)
@@ -525,23 +518,6 @@ class FhirService(private val baseUrl: String, private val apiKey: String, priva
                 .execute()
         } catch (e: Exception) {
             throw wrapExceptionWithUrl(e, "searchPractitioner")
-        }
-    }
-
-    fun createBefund(kontextId: String, value: String): OperationOutcome {
-        try {
-            val befund = FhirApiBefund()
-            addKontextIdentifier(befund, kontextId)
-            befund.status = Observation.ObservationStatus.FINAL
-            befund.effective = DateTimeType(Date())
-            befund.value = StringType(value)
-
-            val result = client.create()
-                .resource(befund)
-                .execute()
-            return result.operationOutcome as OperationOutcome
-        } catch (e: Exception) {
-            throw wrapExceptionWithUrl(e, "createBefund")
         }
     }
 
