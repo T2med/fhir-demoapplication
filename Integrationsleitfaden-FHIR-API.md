@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-06-04**
+Stand: **2026-06-15**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -56,10 +56,10 @@ Demoapplikation                 Auth-Server                       Browser (Nutze
 | `deviceAuthUrl` | Abgeleitet aus `fhirBasisUrl` (gleicher Host, Port 16596) oder `device-flow.properties` | URL des Device Authorization Endpoint |
 | `tokenUrl` | Abgeleitet aus `fhirBasisUrl` (gleicher Host, Port 16596) oder `device-flow.properties` | URL des Token Endpoint |
 | `clientId` | `device-flow.properties` | OAuth Client ID — entspricht der `ClientId` aus der APS-Drittanbieter-Definition (Demoapplikation: `t2demo`) |
-| `clientSecret` | Manuelle Eingabe per Paste | Aus APS-Drittanbieter-Einrichtung; nur im Arbeitsspeicher |
+| `clientSecret` | Manuelle Eingabe per Paste | Aus APS-Drittanbieter-Einrichtung; wird nach erfolgreicher Verbindung persistiert (siehe unten) |
 | `scope` | `device-flow.properties` | OAuth Scope — aktuell in APS: `t2med/aps/fhir` |
 
-Das Client-Secret wird nie persistiert, geloggt oder automatisch übertragen. Es wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff in die Zwischenablage gelegt und von dort durch den Nutzer in das Passwortfeld eingefügt.
+Das Client-Secret wird nicht geloggt. Es wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff in die Zwischenablage gelegt und von dort durch den Nutzer in das Passwortfeld eingefügt. Anders als in früheren Fassungen dieses Leitfadens beschrieben, wird es nach einer erfolgreichen Verbindung **persistiert**, um die automatische Wiederverbindung zu ermöglichen (siehe Abschnitt „Persistenz und automatische Wiederverbindung").
 
 ### Polling-Verhalten
 
@@ -74,6 +74,22 @@ Das Client-Secret wird nie persistiert, geloggt oder automatisch übertragen. Es
 ### Ergebnis nach erfolgreichem Device Flow
 
 Nach erfolgreichem Token-Erhalt ist der FHIR-Service identisch initialisiert wie beim klassischen Deep-Link-Pfad. Alle FHIR-Operationen stehen unverändert zur Verfügung.
+
+### Persistenz und automatische Wiederverbindung
+
+Damit die Demoapplikation nach einem Neustart ohne Deep-Link-Parameter wieder einsatzbereit ist, speichert sie nach einer erfolgreichen Device-Flow-Verbindung den Verbindungszustand in `~/.t2demo/last-connection.properties`:
+
+| Key | Persistiert? | Zweck |
+| --- | --- | --- |
+| `fhir.basis.url` | ja | Wiederaufbau des FHIR-Clients |
+| `kontext.id` | ja | Letzter Kontext |
+| `refresh.token` | ja | Erneuerung des Access-Tokens ohne Browser |
+| `client.secret` | ja | Basic-Auth bei der Token-Erneuerung |
+| `access_token` | **nein** | Nur für die laufende Session im Arbeitsspeicher |
+
+Beim Start ohne Deep-Link-Parameter versucht die App eine automatische Wiederverbindung: Sie lädt die gespeicherte Verbindung und ruft mit dem Refresh-Token den Token-Endpunkt auf (`grant_type=refresh_token`, `Authorization: Basic` aus Client ID und Client-Secret). Bei Erfolg wird der FHIR-Service ohne erneute Browser-Autorisierung initialisiert. Ist der Refresh-Token abgelaufen oder ungültig, werden `refresh.token` und `client.secret` verworfen und der Device-Flow-Dialog erneut geöffnet.
+
+> **Sicherheitshinweis:** Die Persistenz von Client-Secret und Refresh-Token im Klartext ist eine bewusste Vereinfachung der Demoapplikation. In einer Produktivintegration gehören diese Geheimnisse in einen sicheren Schlüsselspeicher (z. B. OS-Keychain), nicht in eine Properties-Datei im Benutzerverzeichnis.
 
 ## 2. Voraussetzungen
 
@@ -482,10 +498,12 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 **Zusätzlich bei OAuth Device Flow (Variante B):**
 - [ ] OAuth Device Authorization Endpoint und Token Endpoint bekannt und erreichbar
 - [ ] Client Secret aus APS-Drittanbieter-Einrichtung bereitgestellt
-- [ ] Client Secret wird ausschließlich im Arbeitsspeicher gehalten, nie persistiert oder geloggt
+- [ ] Client Secret und Refresh-Token nicht im Klartext abgelegt (sicherer Schlüsselspeicher statt Properties-Datei; die Demo persistiert sie bewusst vereinfacht in `~/.t2demo/last-connection.properties`)
+- [ ] Client Secret wird nicht geloggt
 - [ ] Polling-Verhalten für `authorization_pending`, `slow_down`, `expired_token` und `access_denied` implementiert
 - [ ] Polling-Intervall bei `slow_down` korrekt erhöht (mindestens +5 Sekunden)
 - [ ] Device Code Expiry korrekt behandelt (Neustart erforderlich)
+- [ ] Automatische Wiederverbindung per Refresh-Token (`grant_type=refresh_token`) geprüft
 - [ ] Test: kompletter Device Flow mit Autorisierung im Browser
 - [ ] Test: Abbruch und erneuter Start des Device Flow
 

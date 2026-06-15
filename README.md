@@ -30,7 +30,18 @@ T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%
 2. **Warten**: Die App zeigt einen User-Code und eine Verification-URI an. Der Nutzer öffnet die URL im Browser und gibt dort den Code ein. Die App pollt im Hintergrund den Token-Endpunkt.
 3. **Verbinden**: Nach erfolgreichem Token-Erhalt gibt der Nutzer FHIR-Basis-URL und Kontext-ID ein. Die App initialisiert den FHIR-Service identisch zum Deep-Link-Pfad.
 
-Das Client-Secret wird ausschließlich im Arbeitsspeicher gehalten und nie persistiert oder geloggt.
+#### Persistenz und automatische Wiederverbindung
+
+Damit die Demo nach einem Neustart ohne Deep-Link-Parameter wieder einsatzbereit ist, speichert sie nach einer erfolgreichen Device-Flow-Verbindung die zuletzt genutzte Verbindung in `~/.t2demo/last-connection.properties`:
+
+- `fhir.basis.url`
+- `kontext.id`
+- `refresh.token`
+- `client.secret`
+
+Das **Access-Token wird nicht persistiert**, das **Client-Secret und der Refresh-Token hingegen schon** — sie werden für die automatische Wiederverbindung benötigt. Beim Start ohne Deep-Link versucht die App, über den gespeicherten Refresh-Token (`grant_type=refresh_token`, Basic-Auth aus Client ID und Client-Secret) automatisch ein neues Access-Token zu beziehen, ohne erneute Browser-Autorisierung. Ist der Refresh-Token abgelaufen, werden Secret und Token verworfen und der Device-Flow-Dialog erneut geöffnet.
+
+> **Sicherheitshinweis:** Diese Persistenz ist eine bewusste Demo-Vereinfachung. Das Client-Secret liegt dabei im Klartext in der Properties-Datei im Benutzerverzeichnis. In einer Produktivintegration sollte das Secret stattdessen in einem sicheren Schlüsselspeicher (OS-Keychain o. Ä.) abgelegt werden.
 
 ### GUI-Demoaktionen
 
