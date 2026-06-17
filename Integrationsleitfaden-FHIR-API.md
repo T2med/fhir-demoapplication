@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-06-04**
+Stand: **2026-06-15**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -24,56 +24,66 @@ Wichtig:
 
 ## 1a. OAuth Device Flow als alternativer Einstieg (RFC 8628)
 
-Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token unterstützt die Demoapplikation den OAuth 2.0 Device Flow als eigenständigen Authentifizierungsweg. Dieser Pfad ist besonders relevant für Präsentationen, Schulungen und Integrationstests, bei denen kein APS-Client-Start zur Verfügung steht.
+Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token kann sich ein Drittanbieter auch eigenständig per OAuth 2.0 Device Flow am APS-Auth-Server authentifizieren. Dieser Pfad ist relevant, wenn der Drittanbieter-Client ohne vorherigen Deep-Link-Aufruf aus dem APS-Client heraus ein Access-Token benötigt.
 
 ### Ablauf
 
 ```
-Demoapplikation                 Auth-Server                       Browser (Nutzer)
-      |                              |                                   |
-      |-- POST /device_authorization -->|                                |
-      |<-- device_code, user_code, ------|                               |
-      |    verification_uri_complete,    |                               |
-      |    expires_in, interval          |                               |
-      |                              |                                   |
-      |  zeigt user_code + URI ------>|                               Nutzer öffnet URI
-      |                              |<---- Nutzer gibt user_code ein ---|
-      |                              |                                   |
-      |-- POST /token (polling) ----->|                                  |
-      |   (Authorization: Basic, grant_type=urn:ietf:params:oauth:...)  |
-      |<-- authorization_pending -----| (Nutzer noch nicht autorisiert) |
-      |   (warten, erneut pollen)    |                                   |
-      |-- POST /token (polling) ----->|                                  |
-      |<-- access_token, token_type --|  (Nutzer hat autorisiert)        |
-      |                              |                                   |
-      | FHIR-Service initialisiert   |                                   |
+Drittanbieter-Client                   Auth-Server                          Browser (Nutzer)
+        |                                   |                                       |
+        |-- POST /device_authorization ---->|                                       |
+        |  Authorization: Basic             |                                       |
+        |<-- device_code, user_code, -------|                                       |
+        |  verification_uri_complete,       |                                       |
+        |  expires_in, interval             |                                       |
+        |                                   |                                       |
+        |  zeigt user_code + URI -------------------------------------------------->| Nutzer öffnet URI
+        |                                   |<-- Nutzer gibt user_code ein ---------|
+        |                                   |                                       |
+        |-- POST /token (polling) --------->|                                       |
+        |  Authorization: Basic,            |                                       |
+        |  grant_type=device_code           |                                       |
+        |<-- authorization_pending ---------|                                       |
+        |  (warten, erneut pollen)          |                                       |
+        |-- POST /token (polling) --------->|                                       |
+        |<-- access_token, token_type ------|                                       |
+        |                                   |                                       |
+        |  FHIR-Client initialisiert        |                                       |
 ```
 
 ### Konfigurationsparameter
 
-| Parameter | Quelle | Beschreibung |
-| --- | --- | --- |
-| `deviceAuthUrl` | Abgeleitet aus `fhirBasisUrl` (gleicher Host, Port 16596) oder `device-flow.properties` | URL des Device Authorization Endpoint |
-| `tokenUrl` | Abgeleitet aus `fhirBasisUrl` (gleicher Host, Port 16596) oder `device-flow.properties` | URL des Token Endpoint |
-| `clientId` | `device-flow.properties` | OAuth Client ID — entspricht der `ClientId` aus der APS-Drittanbieter-Definition (Demoapplikation: `t2demo`) |
-| `clientSecret` | Manuelle Eingabe per Paste | Aus APS-Drittanbieter-Einrichtung; nur im Arbeitsspeicher |
-| `scope` | `device-flow.properties` | OAuth Scope — aktuell in APS: `t2med/aps/fhir` |
+| Parameter | Beschreibung |
+| --- | --- |
+| `deviceAuthUrl` | URL des Device Authorization Endpoint des APS-Auth-Servers. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/device_authorization`. |
+| `tokenUrl` | URL des Token Endpoint. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/token`. |
+| `clientId` | OAuth Client ID aus der APS-Drittanbieter-Definition (`ClientId`). |
+| `clientSecret` | Client-Secret aus der APS-Drittanbieter-Einrichtung. |
+| `scope` | OAuth Scope — aktuell in APS festgelegt: `t2med/aps/fhir`. |
 
-Das Client-Secret wird nie persistiert, geloggt oder automatisch übertragen. Es wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff in die Zwischenablage gelegt und von dort durch den Nutzer in das Passwortfeld eingefügt.
+Das Client-Secret wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff bereitgestellt. Der Drittanbieter-Client muss es vertraulich behandeln: nicht protokollieren und nur in einem sicheren Schlüsselspeicher vorhalten (siehe Abschnitt 10).
+
+Die Client-Authentifizierung erfolgt bei **allen** Aufrufen (`device_authorization`, Token-Polling und Refresh) über den Header `Authorization: Basic base64(client_id:client_secret)`. Das Client-Secret gehört **nicht** in den Request-Body — dieser enthält nur `client_id` und `scope` (bzw. beim Token-Aufruf `grant_type` und `device_code`). Wird das Secret im Body mitgesendet, lehnt der Auth-Server den Aufruf mit `{"error":"invalid_client"}` ab.
 
 ### Polling-Verhalten
 
-| Server-Antwort | Bedeutung | Verhalten der Demo |
+| Server-Antwort | Bedeutung | Empfohlenes Verhalten des Clients |
 | --- | --- | --- |
-| `200 OK` mit `access_token` | Autorisierung erfolgreich | Token übernehmen, Phase 3 anzeigen |
+| `200 OK` mit `access_token` | Autorisierung erfolgreich | Access-Token übernehmen und FHIR-Client initialisieren |
 | `authorization_pending` | Nutzer hat noch nicht autorisiert | Warten, erneut pollen |
-| `slow_down` | Polling zu häufig | Polling-Intervall um 5 Sekunden erhöhen |
-| `expired_token` | Device Code abgelaufen | Fehleranzeige, Neustart erforderlich |
-| `access_denied` | Nutzer hat abgelehnt | Fehleranzeige |
+| `slow_down` | Polling zu häufig | Polling-Intervall um mindestens 5 Sekunden erhöhen |
+| `expired_token` | Device Code abgelaufen | Fehler anzeigen, Device Flow neu starten |
+| `access_denied` | Nutzer hat abgelehnt | Fehler anzeigen |
 
 ### Ergebnis nach erfolgreichem Device Flow
 
-Nach erfolgreichem Token-Erhalt ist der FHIR-Service identisch initialisiert wie beim klassischen Deep-Link-Pfad. Alle FHIR-Operationen stehen unverändert zur Verfügung.
+Nach erfolgreichem Token-Erhalt kann der Client die FHIR-API mit dem erhaltenen Access-Token (`Authorization: Bearer <access_token>`) identisch zum klassischen Deep-Link-Pfad nutzen. Alle FHIR-Operationen stehen unverändert zur Verfügung.
+
+### Optional: Automatische Wiederverbindung per Refresh-Token
+
+Liefert der Token-Endpoint einen `refresh_token`, kann ein Drittanbieter-Client diesen nutzen, um nach einem Neustart ohne erneute Browser-Autorisierung ein neues Access-Token zu beziehen (`grant_type=refresh_token`, `Authorization: Basic` aus Client ID und Client-Secret). Das Access-Token selbst ist kurzlebig und sollte nicht dauerhaft gespeichert werden. Ist der Refresh-Token abgelaufen oder ungültig, muss der Device Flow erneut durchlaufen werden.
+
+> **Sicherheitshinweis:** Wenn der Client Refresh-Token und Client-Secret für eine spätere Wiederverbindung vorhält, gehören diese Geheimnisse in einen sicheren Schlüsselspeicher (z. B. OS-Keychain), nicht in eine Klartext-Datei.
 
 ## 2. Voraussetzungen
 
@@ -93,9 +103,9 @@ Nach erfolgreichem Token-Erhalt ist der FHIR-Service identisch initialisiert wie
 | Lokale Zertifikate | installationsspezifische APS-Server-Zertifikate werden unterstützt |
 | Pflichtheader serverseitig | `X-API-Key` |
 | Optionale Serverheader | `X-TreatWarningAsError`, `X-FHIR-Profile` |
-| Demo-Header | `Authorization`, `Prefer`, `X-TreatWarningAsError`, `Content-Type` |
+| Optionale Client-Header | `Authorization`, `Prefer`, `X-TreatWarningAsError`, `Content-Type` (siehe Abschnitt 3) |
 | Deep-Link-Parameter | `kontextId`, `fhirBasisUrl`, `oAuthToken` |
-| OAuth Client ID | aus der APS-Drittanbieter-Definition (`ClientId`); für die Demoapplikation: `t2demo` |
+| OAuth Client ID | aus der APS-Drittanbieter-Definition (`ClientId`) |
 | OAuth Scope | aktuell in APS festgelegt: `t2med/aps/fhir` |
 | Fehlerformat | `OperationOutcome` auswerten |
 
@@ -107,14 +117,14 @@ Serverseitig zwingend:
 | --- | --- | --- |
 | `X-API-Key: <API_KEY>` | ja | API-Key des aktivierten Drittanbieters. |
 
-Vom aktuellen Democlient zusätzlich gesendet:
+Optionale, üblicherweise zusätzlich gesendete Header:
 
 | Header | Pflicht aus Serversicht | Bedeutung |
 | --- | --- | --- |
-| `Authorization: Bearer <oAuthToken>` | nein | Wird aus dem Deep-Link-Parameter `oAuthToken` gebildet. |
-| `Prefer: return=OperationOutcome` | nein | Democlient erwartet `OperationOutcome` als Create-Ergebnis. |
+| `Authorization: Bearer <oAuthToken>` | nein | Wird aus dem Deep-Link-Parameter `oAuthToken` (bzw. dem per Device Flow erhaltenen Access-Token) gebildet. |
+| `Prefer: return=OperationOutcome` | nein | Signalisiert, dass ein `OperationOutcome` als Create-Ergebnis erwartet wird. |
 | `X-TreatWarningAsError: true` | nein | Warnungen werden als Fehler behandelt. |
-| `Content-Type: application/fhir+xml; charset=UTF-8` | nein | Aktueller Democlient-Header. Für JSON-Beispiele `application/fhir+json` verwenden. |
+| `Content-Type: application/fhir+xml; charset=UTF-8` | nein | Setzt das Anfrageformat. Für JSON `application/fhir+json` verwenden. |
 
 Optionale FHIR-API-Header:
 
@@ -156,7 +166,7 @@ Externe FHIR-API:
 | --- | --- |
 | Basis | `/aps/fhir/api/r4` |
 | Format in Beispielen | FHIR JSON |
-| Demo-Formatheader | `application/fhir+xml; charset=UTF-8` |
+| Unterstützte Content-Types | `application/fhir+json`, `application/fhir+xml` |
 
 Ressourcen:
 
@@ -175,7 +185,6 @@ Ressourcen:
 | `GET` | `/Practitioner?name=...&identifier=...` | Practitioner nach Name/LANR suchen |
 | `GET` | `/Organization/{id}/Practitioner` | implementierungsnaher Compartment-Sonderfall; Handler liefert aktuell Organisationen zur übergebenen Arztrollen-ID |
 | `POST` | `/Observation` | Observation anlegen |
-| `POST` | `/Befund` | Custom Resource `Befund` anlegen |
 | `POST` | `/Condition` | Diagnose anlegen |
 | `POST` | `/Procedure` | Therapie oder Prozedere anlegen |
 | `POST` | `/DocumentReference` | Freitext oder Anhang anlegen |
@@ -192,7 +201,6 @@ Profilübersicht:
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` | `create` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund\|1.0.0` | `create` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext\|1.0.0` | `create` |
-| Befund | `https://fhir.t2med.de/StructureDefinition/FhirApiBefund\|1.0.0` | `create` |
 | Condition | `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` | `create` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` | `create` |
@@ -235,7 +243,6 @@ Je nach Anwendungsfall:
 | Ressource | Anwendungsfall |
 | --- | --- |
 | `Observation` | Anamnese, Befund oder Freitext |
-| `Befund` | Custom Befund-Ressource |
 | `Condition` | Diagnosen |
 | `Procedure` | Therapie oder Prozedere |
 | `DocumentReference` | Freitext oder eingebetteter Anhang/Datei-Upload |
@@ -276,7 +283,7 @@ Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt 
 | Endpoint | `POST /aps/fhir/api/r4` |
 | Bundle | `Bundle.type = transaction` |
 | Entry-Methode | nur `request.method = POST` implementiert |
-| Entry-URL | Democlient nutzt relative Resource-Namen wie `Observation` oder `Condition` |
+| Entry-URL | relative Resource-Namen wie `Observation` oder `Condition` |
 | Rollback | Bei `error` oder `fatal` in einem Entry-`OperationOutcome` wird die Gesamttransaktion auf Rollback markiert. |
 
 ### 5.5 Schritt 5: Kontextabschluss
@@ -297,7 +304,6 @@ Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt 
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationBefund\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationFreitext\|1.0.0` |
-| Befund | `https://fhir.t2med.de/StructureDefinition/FhirApiBefund\|1.0.0` |
 | Condition | `https://fhir.t2med.de/StructureDefinition/FhirApiConditionDiagnose\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureTherapie\|1.0.0` |
 | Procedure | `https://fhir.t2med.de/StructureDefinition/FhirApiProcedureProcedere\|1.0.0` |
@@ -319,7 +325,7 @@ Statuscodes:
 | HTTP | Bedeutung |
 | --- | --- |
 | `400` | Request formal ungültig, z. B. Profil fehlt oder Kontext-Identifier ist ungültig |
-| `403` | API-Key fehlt oder ist ungültig; beim Demo-API-Key auch: Limit von 100 Aufrufen pro Serverprozess überschritten |
+| `403` | API-Key fehlt oder ist ungültig; bei Verwendung des Test-/Demo-API-Keys zusätzlich: serverseitiges Limit von 100 Aufrufen pro Serverprozess überschritten |
 | `404` | Resource bei `read`, `search(identifier)` oder `update` nicht gefunden |
 | `409` | Versionskonflikt bei `Patient`-Update |
 | `422` | fachliche oder technische Verarbeitung fehlgeschlagen |
@@ -336,7 +342,7 @@ Implementierungsnahe Besonderheiten:
 | `PUT /Patient/{id}` — Optimistic Locking mit `If-Match` | Der Versionskonflikt-Check (→ 409) wird ausgelöst, wenn der `If-Match: W/"<version>"`-Header mitgesendet wird. HAPI-FHIR-Clients setzen diesen automatisch, wenn die Versionsnummer im `idElement` gesetzt ist. Ohne `If-Match`-Header überspringt der Server den Versionscheck — empfohlen wird, den Header immer mitzusenden, um unbeabsichtigte Überschreibungen zu verhindern. |
 | `meta.versionId` im Patient-Response | Der Server liefert `meta.versionId` als vollen Pfad (`{id}/_history/{version}`), nicht als kurze Versionsnummer. Die kurze Versionsnummer für den `If-Match`-Header lässt sich daraus per `IdType(meta.versionId).versionIdPart` extrahieren (ergibt z.B. `"4"` aus `"abc123/_history/4"`). |
 | Warnungen | Ohne `X-TreatWarningAsError: false` werden Warnungen als Fehler behandelt. |
-| Demo-Content-Type | Demo sendet XML-Content-Type; JSON-Beispiele müssen JSON-Content-Type setzen. |
+| Content-Type | Die API akzeptiert `application/fhir+json` und `application/fhir+xml`; `Content-Type` und `Accept` entsprechend dem gewünschten Format setzen. |
 
 ## 8. Verwendete Code-Systeme (insb. `Condition`)
 
@@ -455,10 +461,11 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 | Öffentliche CA | Drittanbieter dürfen keine öffentliche CA-signierte Zertifikatskette voraussetzen |
 | HTTPS-Client | Bei `fhirBasisUrl` mit `https://` eigenen SSL-Kontext bzw. HTTP-Client konfigurieren |
 | Lokale Hosts | `localhost`, `127.0.0.1` und lokal konfigurierte Hostnamen unterstützen |
-| Demo-Verhalten | Demo nutzt einen dynamischen SSL-Kontext und akzeptiert lokale Zertifikate; produktiv sollte der Trust-Store verwaltet werden |
+| Zertifikatsprüfung | Installationsspezifische lokale Zertifikate akzeptieren; produktiv den Trust-Store kontrolliert verwalten, statt die Zertifikatsprüfung pauschal zu deaktivieren |
+| Geheimnisse | Client-Secret und Refresh-Token nicht im Klartext ablegen, sondern in einem sicheren Schlüsselspeicher; nicht protokollieren |
 | Kontext-ID | als kurzlebiges technisches Token behandeln |
 | Warnungen | `X-TreatWarningAsError` bewusst setzen |
-| Demo-API-Key-Limit | Bei Nutzung des Demo-API-Keys (t2demo-Client) sind maximal 100 API-Aufrufe pro Serverprozess möglich. Nach Erreichen des Limits liefert jeder weitere Aufruf `403 Forbidden`. Der Zähler wird nicht zurückgesetzt — für weitere Tests APS neu starten. |
+| Test-/Demo-API-Key-Limit | Bei Verwendung des Test-/Demo-API-Keys begrenzt der Server auf maximal 100 Aufrufe pro Serverprozess. Nach Erreichen des Limits liefert jeder weitere Aufruf `403 Forbidden`. Der Zähler wird nicht zurückgesetzt — für weitere Tests den APS-Server neu starten. |
 
 ## 11. Go-Live-Checkliste
 
@@ -482,10 +489,12 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 **Zusätzlich bei OAuth Device Flow (Variante B):**
 - [ ] OAuth Device Authorization Endpoint und Token Endpoint bekannt und erreichbar
 - [ ] Client Secret aus APS-Drittanbieter-Einrichtung bereitgestellt
-- [ ] Client Secret wird ausschließlich im Arbeitsspeicher gehalten, nie persistiert oder geloggt
+- [ ] Client Secret und Refresh-Token nur im sicheren Schlüsselspeicher abgelegt, nicht im Klartext
+- [ ] Client Secret wird nicht geloggt
 - [ ] Polling-Verhalten für `authorization_pending`, `slow_down`, `expired_token` und `access_denied` implementiert
 - [ ] Polling-Intervall bei `slow_down` korrekt erhöht (mindestens +5 Sekunden)
 - [ ] Device Code Expiry korrekt behandelt (Neustart erforderlich)
+- [ ] Automatische Wiederverbindung per Refresh-Token (`grant_type=refresh_token`) geprüft
 - [ ] Test: kompletter Device Flow mit Autorisierung im Browser
 - [ ] Test: Abbruch und erneuter Start des Device Flow
 
@@ -496,7 +505,7 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 1. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
 2. HTTPS-Client für `fhirBasisUrl` mit passender SSL-Konfiguration initialisieren.
 3. `X-API-Key` bei jedem FHIR-Aufruf mitsenden.
-4. Optional wie die Demo `Authorization: Bearer <oAuthToken>`, `Prefer: return=OperationOutcome` und `X-TreatWarningAsError: true` mitsenden.
+4. Optional `Authorization: Bearer <oAuthToken>`, `Prefer: return=OperationOutcome` und `X-TreatWarningAsError: true` mitsenden.
 5. `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>` ausführen.
 6. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier oder Encounter-Referenz anlegen.
 7. `OperationOutcome` und HTTP-Status auswerten.
@@ -504,10 +513,14 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 
 ### Variante B: OAuth Device Flow
 
-1. `POST <deviceAuthUrl>` mit `client_id`, `client_secret` und `scope` im Body (Form-Encoded).
+> **Wichtig:** Das Client-Secret wird bei **allen** Aufrufen ausschließlich im Header
+> `Authorization: Basic base64(client_id:client_secret)` übertragen, **niemals** im Request-Body.
+> Wird `client_secret` im Body mitgesendet, antwortet der Auth-Server mit `{"error":"invalid_client"}`.
+
+1. `POST <deviceAuthUrl>` mit Header `Authorization: Basic base64(client_id:client_secret)`; im Body (Form-Encoded) nur `client_id` und `scope`.
 2. `device_code`, `user_code`, `verification_uri_complete` (Fallback: `verification_uri`), `expires_in` und `interval` aus der Response lesen.
 3. `user_code` und `verification_uri_complete` dem Nutzer anzeigen.
-4. Polling: `POST <tokenUrl>` mit `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code`, `client_id`, `client_secret` — alle `interval` Sekunden.
+4. Polling: `POST <tokenUrl>` mit demselben `Authorization: Basic`-Header; im Body `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code` und `client_id` — alle `interval` Sekunden.
 5. Bei `authorization_pending`: warten und erneut pollen. Bei `slow_down`: Intervall um 5 Sekunden erhöhen.
 6. Bei `200 OK` mit `access_token`: Token übernehmen, FHIR-Client wie in Variante A initialisieren.
 7. Ab hier identisch mit Variante A: FHIR-Operationen mit `Authorization: Bearer <access_token>` ausführen.
@@ -520,7 +533,7 @@ Hinweise:
 | --- | --- |
 | Platzhalter | Beispiele verwenden `<HOST>`, `<API_KEY>`, `<KONTEXT_ID>`, `<OAUTH_TOKEN>`. |
 | JSON | Für JSON `Content-Type` und `Accept` auf `application/fhir+json` setzen. |
-| Demo | Der aktuelle Democlient setzt global `Content-Type: application/fhir+xml; charset=UTF-8`. |
+| XML | Die API akzeptiert alternativ `application/fhir+xml; charset=UTF-8`. |
 | `X-FHIR-Profile` | Bei `create`-Operationen nicht erforderlich; maßgeblich ist `meta.profile`. |
 | Deep Link | Der APS-Client öffnet das `aufrufUrlTemplate` nach Ersetzung von `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}`. |
 

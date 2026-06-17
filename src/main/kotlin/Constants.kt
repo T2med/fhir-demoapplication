@@ -20,7 +20,6 @@ object FhirConstants {
     const val PROFILE_ENCOUNTER    = "https://fhir.t2med.de/StructureDefinition/FhirApiEncounter|1.0.0"
     const val PROFILE_ORGANIZATION = "https://fhir.t2med.de/StructureDefinition/FhirApiOrganization|1.0.0"
     const val PROFILE_PRACTITIONER = "https://fhir.t2med.de/StructureDefinition/FhirApiPractitioner|1.0.0"
-    const val PROFILE_BEFUND       = "https://fhir.t2med.de/StructureDefinition/FhirApiBefund|1.0.0"
     const val EXTENSION_ANHANG_KUERZEL = "https://fhir.t2med.de/StructureDefinition/FhirApiAnhangKuerzel"
     
     // HTTP Headers

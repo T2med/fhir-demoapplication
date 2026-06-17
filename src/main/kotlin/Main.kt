@@ -177,10 +177,6 @@ class DemoApp : JFrame("T2demo Custom URL App") {
         btnSearchPract.addActionListener { testSearchPractitioner() }
         buttonPanel.add(btnSearchPract)
 
-        val btnCreateBefund = JButton("Befund anlegen")
-        btnCreateBefund.addActionListener { testCreateBefund() }
-        buttonPanel.add(btnCreateBefund)
-        
         apiTestPanel.add(buttonPanel)
         
         val logArea = JTextArea(10, 50)
@@ -735,22 +731,6 @@ class DemoApp : JFrame("T2demo Custom URL App") {
             } catch (e: Exception) {
                 SwingUtilities.invokeLater { log("Fehler bei Practitioner-Suche: ${e.message}") }
                 logger.error("Fehler bei Practitioner-Suche", e)
-            }
-        }
-    }
-
-    private fun testCreateBefund() {
-        val kontext = kontextId ?: return log(AppConstants.ERROR_KONTEXT_ID_MISSING)
-        val service = fhirService ?: return log(AppConstants.ERROR_FHIR_SERVICE_NOT_INITIALIZED)
-
-        executor.execute {
-            try {
-                log("Lege Befund an...")
-                val outcome = service.createBefund(kontext, "Test-Befund via Demoapp")
-                SwingUtilities.invokeLater { log("Ergebnis: ${outcome.issueFirstRep.severity} - ${outcome.issueFirstRep.diagnostics ?: "OK"}") }
-            } catch (e: Exception) {
-                SwingUtilities.invokeLater { log("Fehler bei Befund-Erstellung: ${e.message}") }
-                logger.error("Fehler bei Befund-Erstellung", e)
             }
         }
     }

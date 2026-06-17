@@ -19,7 +19,7 @@ Die URL wird in der GUI angezeigt. Protokoll, Host, Pfad und alle Query-Paramete
 Beispiel:
 
 ```text
-T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=<OAUTH_TOKEN>
+T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi%2Fr4&oAuthToken=<OAUTH_TOKEN>
 ```
 
 ### OAuth Device Flow (Standalone-Anmeldung)
@@ -30,18 +30,36 @@ T2demo://demo/start?kontextId=<KONTEXT_ID>&fhirBasisUrl=https%3A%2F%2F127.0.0.1%
 2. **Warten**: Die App zeigt einen User-Code und eine Verification-URI an. Der Nutzer öffnet die URL im Browser und gibt dort den Code ein. Die App pollt im Hintergrund den Token-Endpunkt.
 3. **Verbinden**: Nach erfolgreichem Token-Erhalt gibt der Nutzer FHIR-Basis-URL und Kontext-ID ein. Die App initialisiert den FHIR-Service identisch zum Deep-Link-Pfad.
 
-Das Client-Secret wird ausschließlich im Arbeitsspeicher gehalten und nie persistiert oder geloggt.
+#### Persistenz und automatische Wiederverbindung
+
+Damit die Demo nach einem Neustart ohne Deep-Link-Parameter wieder einsatzbereit ist, speichert sie nach einer erfolgreichen Device-Flow-Verbindung die zuletzt genutzte Verbindung in `~/.t2demo/last-connection.properties`:
+
+- `fhir.basis.url`
+- `kontext.id`
+- `refresh.token`
+- `client.secret`
+
+Das **Access-Token wird nicht persistiert**, das **Client-Secret und der Refresh-Token hingegen schon** — sie werden für die automatische Wiederverbindung benötigt. Beim Start ohne Deep-Link versucht die App, über den gespeicherten Refresh-Token (`grant_type=refresh_token`, Basic-Auth aus Client ID und Client-Secret) automatisch ein neues Access-Token zu beziehen, ohne erneute Browser-Autorisierung. Ist der Refresh-Token abgelaufen, werden Secret und Token verworfen und der Device-Flow-Dialog erneut geöffnet.
+
+> **Sicherheitshinweis:** Diese Persistenz ist eine bewusste Demo-Vereinfachung. Das Client-Secret liegt dabei im Klartext in der Properties-Datei im Benutzerverzeichnis. In einer Produktivintegration sollte das Secret stattdessen in einem sicheren Schlüsselspeicher (OS-Keychain o. Ä.) abgelegt werden.
 
 ### GUI-Demoaktionen
 
 Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 
-- Patient über Kontext-Identifier suchen
-- Patient per Name, Vorname und Geburtsdatum suchen
-- `Observation` mit Profil `Befund` anlegen
-- `Condition` für eine Diagnose anlegen
-- `Procedure` mit Profil `Therapie` anlegen
-- `DocumentReference` für Freitext anlegen
+- `Patient (Kontext) suchen` — Patient über Kontext-Identifier suchen
+- `Patient (Name) suchen` — Patient per Name, Vorname und Geburtsdatum suchen
+- `Patient anlegen`
+- `Patient aktualisieren`
+- `Observation (Befund) anlegen`
+- `Condition (Diagnose) anlegen`
+- `Procedure (Therapie) anlegen`
+- `DocumentRef anlegen` — `DocumentReference` für Freitext
+- `Dokument hochladen` — `DocumentReference` mit eingebettetem Datei-Anhang
+- `Encounter lesen`
+- `Organisation suchen`
+- `Practitioner suchen`
+- `Transaktion (Obs+Cond)` — FHIR-Transaction-Bundle mit `Observation` und `Condition`
 
 ## Technischer Ablauf
 
@@ -50,7 +68,7 @@ Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 1. APS startet den Drittanbieter über einen Deep Link.
 2. Die Demo extrahiert `kontextId`, `fhirBasisUrl` und `oAuthToken`.
 3. Für `https://`-Basis-URLs wird ein eigener HTTP-/SSL-Client konfiguriert, der auch installationsspezifische lokale Zertifikate akzeptiert.
-4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api`.
+4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api/r4`.
 5. Kontextgebundene Ressourcen erhalten automatisch den Identifier `https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`.
 
 ### Startpfad 2: OAuth Device Flow
@@ -67,6 +85,7 @@ Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 
 Die Demo setzt für Requests diese Header:
 
+- `Content-Type: application/fhir+xml; charset=UTF-8`
 - `Authorization: Bearer <oAuthToken>`
 - `Prefer: return=OperationOutcome`
 - `X-API-Key: <API_KEY>`
@@ -131,7 +150,7 @@ Der Standard-Testlauf enthält nur die CI-tauglichen Unit- und SSL-Tests.
 ### Integrationstests gezielt ausführen
 
 ```bash
-export FHIR_BASE_URL=https://127.0.0.1:16567/aps/fhir/api
+export FHIR_BASE_URL=https://127.0.0.1:16567/aps/fhir/api/r4
 export FHIR_KONTEXT_ID=<KONTEXT_ID>
 export FHIR_OAUTH_TOKEN=<OAUTH_TOKEN>
 ./gradlew integrationTest
@@ -166,7 +185,7 @@ Das URL-Scheme `T2demo://` ist in der Vorlage [src/main/resources/macos/Info.pli
 Test:
 
 ```bash
-open "T2demo://demo/start?kontextId=test&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi&oAuthToken=test-token"
+open "T2demo://demo/start?kontextId=test&fhirBasisUrl=https%3A%2F%2F127.0.0.1%3A16567%2Faps%2Ffhir%2Fapi%2Fr4&oAuthToken=test-token"
 ```
 
 ### Windows
