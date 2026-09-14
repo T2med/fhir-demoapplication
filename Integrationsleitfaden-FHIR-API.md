@@ -151,7 +151,6 @@ Typische Fehler:
 | --- | --- |
 | `401 Unauthorized` (`WWW-Authenticate: Bearer`) | Bearer-Token fehlt, ist ungültig oder abgelaufen. |
 | `403 Forbidden` | API-Key fehlt oder ist ungültig. |
-| `503 Service Unavailable` | FHIR-API ist per Feature-Flag nicht freigeschaltet. |
 
 Hinweise aus der Kontext-Anlage:
 
@@ -334,7 +333,6 @@ Statuscodes:
 | `409` | Versionskonflikt bei `Patient`-Update |
 | `422` | fachliche oder technische Verarbeitung fehlgeschlagen |
 | `501` | Profil nicht unterstützt |
-| `503` | FHIR-API per Feature-Flag deaktiviert |
 
 Implementierungsnahe Besonderheiten:
 
