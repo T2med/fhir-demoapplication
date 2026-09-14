@@ -2,7 +2,7 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-06-15**
+Stand: **2026-09-14**
 
 ## 1. Zielbild und Grundprinzip
 
@@ -31,22 +31,22 @@ Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token kann sich ein Dr
 ```
 Drittanbieter-Client                   Auth-Server                          Browser (Nutzer)
         |                                   |                                       |
-        |-- POST /device_authorization ---->|                                       |
+        |-- POST /device_authorization ----→|                                       |
         |  Authorization: Basic             |                                       |
-        |<-- device_code, user_code, -------|                                       |
+        |←-- device_code, user_code, -------|                                       |
         |  verification_uri_complete,       |                                       |
         |  expires_in, interval             |                                       |
         |                                   |                                       |
-        |  zeigt user_code + URI -------------------------------------------------->| Nutzer öffnet URI
-        |                                   |<-- Nutzer gibt user_code ein ---------|
+        |  zeigt user_code + URI --------------------------------------------------→| Nutzer öffnet URI
+        |                                   |←-- Nutzer gibt user_code ein ---------|
         |                                   |                                       |
-        |-- POST /token (polling) --------->|                                       |
+        |-- POST /token (polling) ---------→|                                       |
         |  Authorization: Basic,            |                                       |
         |  grant_type=device_code           |                                       |
-        |<-- authorization_pending ---------|                                       |
+        |←-- authorization_pending ---------|                                       |
         |  (warten, erneut pollen)          |                                       |
-        |-- POST /token (polling) --------->|                                       |
-        |<-- access_token, token_type ------|                                       |
+        |-- POST /token (polling) ---------→|                                       |
+        |←-- access_token, token_type ------|                                       |
         |                                   |                                       |
         |  FHIR-Client initialisiert        |                                       |
 ```
@@ -57,7 +57,7 @@ Drittanbieter-Client                   Auth-Server                          Brow
 | --- | --- |
 | `deviceAuthUrl` | URL des Device Authorization Endpoint des APS-Auth-Servers. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/device_authorization`. |
 | `tokenUrl` | URL des Token Endpoint. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/token`. |
-| `clientId` | OAuth Client ID aus der APS-Drittanbieter-Definition (`ClientId`). |
+| `clientId` | OAuth Client ID aus der APS-Drittanbieter-Definition (`ClientId`). Für die öffentliche Demo-App lautet die Client-ID `t2test`. |
 | `clientSecret` | Client-Secret aus der APS-Drittanbieter-Einrichtung. |
 | `scope` | OAuth Scope — aktuell in APS festgelegt: `t2med/aps/fhir`. |
 
@@ -101,9 +101,9 @@ Liefert der Token-Endpoint einen `refresh_token`, kann ein Drittanbieter-Client 
 | FHIR-Client | HTTPS-Client für FHIR R4 |
 | Lokale HTTPS-Endpunkte | lokale APS-Server-URLs werden unterstützt |
 | Lokale Zertifikate | installationsspezifische APS-Server-Zertifikate werden unterstützt |
-| Pflichtheader serverseitig | `X-API-Key` |
+| Pflichtheader serverseitig | `X-API-Key`, `Authorization: Bearer` (siehe Migrationshinweis in Abschnitt 3) |
 | Optionale Serverheader | `X-TreatWarningAsError`, `X-FHIR-Profile` |
-| Optionale Client-Header | `Authorization`, `Prefer`, `X-TreatWarningAsError`, `Content-Type` (siehe Abschnitt 3) |
+| Optionale Client-Header | `Prefer`, `X-TreatWarningAsError`, `Content-Type` (siehe Abschnitt 3) |
 | Deep-Link-Parameter | `kontextId`, `fhirBasisUrl`, `oAuthToken` |
 | OAuth Client ID | aus der APS-Drittanbieter-Definition (`ClientId`) |
 | OAuth Scope | aktuell in APS festgelegt: `t2med/aps/fhir` |
@@ -116,12 +116,14 @@ Serverseitig zwingend:
 | Header | Pflicht | Bedeutung |
 | --- | --- | --- |
 | `X-API-Key: <API_KEY>` | ja | API-Key des aktivierten Drittanbieters. |
+| `Authorization: Bearer <oAuthToken>` | **ja** (Referenzumgebung; produktiv abhängig vom Rollout-Stand der jeweiligen Installation) | Wird aus dem Deep-Link-Parameter `oAuthToken` (bzw. dem per Device Flow erhaltenen Access-Token) gebildet. Ohne gültigen Bearer-Token antwortet die API mit `401 Unauthorized` und dem Header `WWW-Authenticate: Bearer`. |
+
+> **Migrationshinweis:** Die FHIR-API wird schrittweise von reiner API-Key-Authentifizierung auf ein zusätzlich zwingendes OAuth-Bearer-Verfahren umgestellt. Die Referenzumgebung läuft bereits mit der neuen, token-pflichtigen Variante. Drittanbieter sollten den `Authorization: Bearer`-Header daher grundsätzlich als **verpflichtend** einplanen, auch wenn ältere produktive Installationen ihn (noch) nicht verlangen.
 
 Optionale, üblicherweise zusätzlich gesendete Header:
 
 | Header | Pflicht aus Serversicht | Bedeutung |
 | --- | --- | --- |
-| `Authorization: Bearer <oAuthToken>` | nein | Wird aus dem Deep-Link-Parameter `oAuthToken` (bzw. dem per Device Flow erhaltenen Access-Token) gebildet. |
 | `Prefer: return=OperationOutcome` | nein | Signalisiert, dass ein `OperationOutcome` als Create-Ergebnis erwartet wird. |
 | `X-TreatWarningAsError: true` | nein | Warnungen werden als Fehler behandelt. |
 | `Content-Type: application/fhir+xml; charset=UTF-8` | nein | Setzt das Anfrageformat. Für JSON `application/fhir+json` verwenden. |
@@ -147,6 +149,7 @@ Typische Fehler:
 
 | HTTP | Bedeutung |
 | --- | --- |
+| `401 Unauthorized` (`WWW-Authenticate: Bearer`) | Bearer-Token fehlt, ist ungültig oder abgelaufen. |
 | `403 Forbidden` | API-Key fehlt oder ist ungültig. |
 | `503 Service Unavailable` | FHIR-API ist per Feature-Flag nicht freigeschaltet. |
 
@@ -325,6 +328,7 @@ Statuscodes:
 | HTTP | Bedeutung |
 | --- | --- |
 | `400` | Request formal ungültig, z. B. Profil fehlt oder Kontext-Identifier ist ungültig |
+| `401` | Bearer-Token fehlt, ist ungültig oder abgelaufen; die Antwort enthält `WWW-Authenticate: Bearer` |
 | `403` | API-Key fehlt oder ist ungültig; bei Verwendung des Test-/Demo-API-Keys zusätzlich: serverseitiges Limit von 100 Aufrufen pro Serverprozess überschritten |
 | `404` | Resource bei `read`, `search(identifier)` oder `update` nicht gefunden |
 | `409` | Versionskonflikt bei `Patient`-Update |
@@ -483,6 +487,7 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 - [ ] Test: gewünschte `POST`-Ressourcentypen mit korrektem `meta.profile`
 - [ ] Test: `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0`
 - [ ] Test: Fehlerfall ohne oder mit falschem Profil
+- [ ] Test: Fehlerfall ohne oder mit ungültigem Bearer-Token (`401`)
 - [ ] Optional: Transaction-Verhalten mit Rollback geprüft
 - [ ] Monitoring für HTTP-Status und `OperationOutcome` vorhanden
 
@@ -505,7 +510,7 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 1. Deep Link auswerten und `kontextId`, `fhirBasisUrl`, `oAuthToken` übernehmen.
 2. HTTPS-Client für `fhirBasisUrl` mit passender SSL-Konfiguration initialisieren.
 3. `X-API-Key` bei jedem FHIR-Aufruf mitsenden.
-4. Optional `Authorization: Bearer <oAuthToken>`, `Prefer: return=OperationOutcome` und `X-TreatWarningAsError: true` mitsenden.
+4. `Authorization: Bearer <oAuthToken>` mitsenden (siehe Migrationshinweis in Abschnitt 3); optional zusätzlich `Prefer: return=OperationOutcome` und `X-TreatWarningAsError: true`.
 5. `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>` ausführen.
 6. Gewünschte Ressource mit gültigem `meta.profile` und Kontext-Identifier oder Encounter-Referenz anlegen.
 7. `OperationOutcome` und HTTP-Status auswerten.
@@ -1028,7 +1033,27 @@ X-API-Key: <API_KEY>
 
 ### 2. Typische Fehlerbeispiele
 
-#### 2.1 Fehlender API-Key (403)
+#### 2.1 Fehlendes oder ungültiges Bearer-Token (401)
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer
+```
+
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [
+    {
+      "severity": "error",
+      "code": "login",
+      "diagnostics": "Der Bearer-Token fehlt oder ist ungültig."
+    }
+  ]
+}
+```
+
+#### 2.2 Fehlender API-Key (403)
 
 ```json
 {
@@ -1043,7 +1068,7 @@ X-API-Key: <API_KEY>
 }
 ```
 
-#### 2.2 Profil fehlt bei Create (400)
+#### 2.3 Profil fehlt bei Create (400)
 
 ```json
 {
@@ -1063,7 +1088,7 @@ X-API-Key: <API_KEY>
 }
 ```
 
-#### 2.3 Profil nicht unterstützt (501)
+#### 2.4 Profil nicht unterstützt (501)
 
 ```json
 {
