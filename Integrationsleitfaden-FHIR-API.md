@@ -57,7 +57,7 @@ Drittanbieter-Client                   Auth-Server                          Brow
 | --- | --- |
 | `deviceAuthUrl` | URL des Device Authorization Endpoint des APS-Auth-Servers. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/device_authorization`. |
 | `tokenUrl` | URL des Token Endpoint. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/token`. |
-| `clientId` | OAuth Client ID aus der APS-Drittanbieter-Definition (`ClientId`). Für die öffentliche Demo-App lautet die Client-ID `t2test`. |
+| `clientId` | OAuth Client ID aus der APS-Drittanbieter-Definition (`ClientId`). Für die öffentliche Demo-App lautet die Client-ID `t2demo`. |
 | `clientSecret` | Client-Secret aus der APS-Drittanbieter-Einrichtung. |
 | `scope` | OAuth Scope — aktuell in APS festgelegt: `t2med/aps/fhir`. |
 
@@ -140,7 +140,6 @@ Wichtig:
 
 | Thema | Erklärung |
 | --- | --- |
-| `loginToken` | Wird von `/aps/rest/fhir/api/kontext/anlegen` geliefert, wenn das aktivierte Produkt eine `clientId` hat. |
 | `oAuthToken` | Parametername im Deep Link; enthält das `loginToken` aus der Kontext-Boundary. |
 | Leerer Token | Wenn kein `loginToken` erzeugt wird, ersetzt der APS-Client `${oAuthToken}` durch einen leeren Wert. |
 | `fhirBasisUrl` | Muss unverändert als Basis-URL des FHIR-Clients verwendet werden. |
