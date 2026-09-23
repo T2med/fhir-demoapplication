@@ -1,6 +1,6 @@
 # T2med FHIR-API-Demo
 
-Diese Demoapplikation ist eine Desktop-Referenz für die Anbindung eines Drittanbieters an die externe T2med-FHIR-API. Sie unterstützt zwei Startpfade: den Deep-Link-basierten Start aus dem APS-Client heraus sowie einen eigenständigen OAuth-Device-Flow-Start. Nach der Authentifizierung stellt sie typische FHIR-Lese- und Schreiboperationen gegen einen APS-FHIR-Endpunkt bereit.
+Diese Demoapplikation ist eine Desktop-Referenz für die Anbindung eines Drittanbieters an die externe T2med-FHIR-API. Sie unterstützt zwei Startpfade: den Deep-Link-basierten Start aus dem T2med-Client heraus sowie einen eigenständigen OAuth-Device-Flow-Start. Nach der Authentifizierung stellt sie typische FHIR-Lese- und Schreiboperationen gegen einen T2med-FHIR-Endpunkt bereit.
 
 Die README beschreibt den aktuellen Implementierungsstand der Demo. Fachliche Integrationsdetails und HTTP-Beispiele stehen zusätzlich im [Integrationsleitfaden-FHIR-API.md](./Integrationsleitfaden-FHIR-API.md).
 
@@ -65,7 +65,7 @@ Die aktuelle Oberfläche bietet Buttons für diese FHIR-Aktionen:
 
 ### Startpfad 1: Deep Link
 
-1. APS startet den Drittanbieter über einen Deep Link.
+1. T2med startet den Drittanbieter über einen Deep Link.
 2. Die Demo extrahiert `kontextId`, `fhirBasisUrl` und `oAuthToken`.
 3. Für `https://`-Basis-URLs wird ein eigener HTTP-/SSL-Client konfiguriert, der auch installationsspezifische lokale Zertifikate akzeptiert.
 4. Die Demo sendet FHIR-R4-Requests an `/aps/fhir/api/r4`.
@@ -118,7 +118,7 @@ Kontextgebundene Ressourcen verwenden:
 - Der API-Key ist in der GUI-Initialisierung fest im Code hinterlegt. Das ist für diese Demo beabsichtigt, weil der verwendete Testschlüssel nicht geheim ist.
 - Dieser Schlüssel ist ausschließlich für Demo-, Test- und Integrationsumgebungen gedacht, niemals für Produktion.
 - Die App ist auf manuelle Bedienung und Sichtprüfung ausgelegt, nicht auf headless Betrieb.
-- Die SSL-Strategie akzeptiert für `https://` bewusst auch lokale, installationsspezifische Zertifikate. Das passt zum lokalen APS-Szenario und ist sicherheitsseitig eine Integrationsentscheidung.
+- Die SSL-Strategie akzeptiert für `https://` bewusst auch lokale, installationsspezifische Zertifikate. Das passt zum lokalen T2med-Szenario und ist sicherheitsseitig eine Integrationsentscheidung.
 
 ## Build und Start
 
@@ -214,7 +214,7 @@ Die Test-Suite deckt drei Ebenen ab:
 
 - `FhirServiceTest`: Unit-Tests für Such-, Create- und Transaction-Verhalten
 - `FhirServiceSslTest`: Verifikation der HTTP-/HTTPS-Konfiguration
-- `FhirServiceIntegrationTest`: opt-in Live-Test gegen einen laufenden lokalen APS-/FHIR-Server
+- `FhirServiceIntegrationTest`: opt-in Live-Test gegen einen laufenden lokalen T2med-Server
 
 Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte für Basis-URL, Kontext, Token und API-Key. Er ist deshalb vom Standardlauf getrennt und für lokale Verifikation gedacht.
 
@@ -224,7 +224,7 @@ Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte 
 
   1. JAR oder natives Paket bauen.
   2. App starten oder als URL-Handler registrieren.
-  3. Im APS-Client:
+  3. Im T2med-Client:
      1. Das Benutzerrecht ```Administration|Externe API Drittanbieter-Zugriffe verwalten``` erteilen.
      2. Über die Vorgangssuche den Vorgang ```Drittanbieter-Zugriffe verwalten``` öffnen und gewünschte Anbindung auf "grün" setzen.
      3. In der Button-Leiste Geräteliste öffnen und ```T2demo``` auswählen. Dadurch wird der Deep Link mit `kontextId`, `fhirBasisUrl` und `oAuthToken` aufgerufen.
@@ -235,7 +235,7 @@ Der Integrationstest benötigt einen erreichbaren Server und gültige Testwerte 
 ### Schnelltest via Device Flow
 
   1. `device-flow.properties` mit den Auth-Server-Endpunkten befüllen (oder Werte direkt im Dialog eingeben).
-  2. Im APS-Client für den Drittanbieter ein Client-Secret generieren und in die Zwischenablage kopieren.
+  2. Im T2med-Client für den Drittanbieter ein Client-Secret generieren und in die Zwischenablage kopieren.
   3. Demoapp starten, Button „Standalone-Anmeldung (Device Flow)" klicken.
   4. Client-Secret einfügen, „Device Flow starten" klicken.
   5. Angezeigte URL im Browser öffnen, User-Code eingeben und Zugriff bestätigen.
