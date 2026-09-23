@@ -2,16 +2,16 @@
 
 Dieser Leitfaden beschreibt den praktischen Integrationsablauf für Drittanbieter gegen die T2med FHIR-API.
 
-Stand: **2026-09-14**
+Stand: **2026-09-23**
 
 ## 1. Zielbild und Grundprinzip
 
 Die Integration ist kontextbasiert:
 
-1. Die Drittanbieter-Software wird durch Nutzerinteraktion aus dem APS-Client heraus per Deep Link aufgerufen. Dafür wird im APS ein temporärer Kontext erstellt.
+1. Die Drittanbieter-Software wird durch Nutzerinteraktion aus dem T2med-Client heraus per Deep Link aufgerufen. Dafür wird in T2med ein temporärer Kontext erstellt.
 2. Der Drittanbieter ruft die FHIR-API mit `X-API-Key` auf.
 3. Der Drittanbieter übergibt die `kontextId` als FHIR-Identifier oder als `Encounter`-Referenz in kontextgebundenen Ressourcen.
-4. APS ordnet die Daten dem Kontext zu und schreibt sie in die Fachdomäne.
+4. T2med ordnet die Daten dem Kontext zu und schreibt sie in die Fachdomäne.
 
 Wichtig:
 
@@ -21,10 +21,11 @@ Wichtig:
 | Encounter-Referenz | `Encounter/<kontextId>` |
 | Kontextdauer | Kontexte werden bis zu 4 Stunden vorgehalten und stündlich bereinigt. |
 | Kontextpflicht | Kontextgebundene `create`-Operationen und `GET /Patient?identifier=...` benötigen einen gültigen Kontext. |
+| Kontext selbst anlegen | Beim Einstieg per OAuth Device Flow (Abschnitt 1a) kann der Drittanbieter über `POST /Encounter` selbst einen Kontext anlegen, z. B. nach einem Patientenwechsel (siehe Abschnitt 5.1a, ab T2med 26.10). |
 
 ## 1a. OAuth Device Flow als alternativer Einstieg (RFC 8628)
 
-Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token kann sich ein Drittanbieter auch eigenständig per OAuth 2.0 Device Flow am APS-Auth-Server authentifizieren. Dieser Pfad ist relevant, wenn der Drittanbieter-Client ohne vorherigen Deep-Link-Aufruf aus dem APS-Client heraus ein Access-Token benötigt.
+Neben dem klassischen Deep-Link-Start mit fertigem Bearer-Token kann sich ein Drittanbieter auch eigenständig per OAuth 2.0 Device Flow am T2med-Auth-Server authentifizieren. Dieser Pfad ist relevant, wenn der Drittanbieter-Client ohne vorherigen Deep-Link-Aufruf aus dem T2med-Client heraus ein Access-Token benötigt.
 
 ### Ablauf
 
@@ -55,13 +56,13 @@ Drittanbieter-Client                   Auth-Server                          Brow
 
 | Parameter | Beschreibung |
 | --- | --- |
-| `deviceAuthUrl` | URL des Device Authorization Endpoint des APS-Auth-Servers. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/device_authorization`. |
+| `deviceAuthUrl` | URL des Device Authorization Endpoint des T2med-Auth-Servers. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/device_authorization`. |
 | `tokenUrl` | URL des Token Endpoint. Standard: gleicher Host wie `fhirBasisUrl`, Port `16596`, Pfad `/oauth2/token`. |
-| `clientId` | OAuth Client ID aus der APS-Drittanbieter-Definition (`ClientId`). Für die öffentliche Demo-App lautet die Client-ID `t2demo`. |
-| `clientSecret` | Client-Secret aus der APS-Drittanbieter-Einrichtung. |
-| `scope` | OAuth Scope — aktuell in APS festgelegt: `t2med/aps/fhir`. |
+| `clientId` | OAuth Client ID aus der T2med-Drittanbieter-Definition (`ClientId`). Für die öffentliche Demo-App lautet die Client-ID `t2demo`. |
+| `clientSecret` | Client-Secret aus der T2med-Drittanbieter-Einrichtung. |
+| `scope` | OAuth Scope — aktuell in T2med festgelegt: `t2med/aps/fhir`. |
 
-Das Client-Secret wird im APS-Einrichtungsprozess für den Drittanbieter-Zugriff bereitgestellt. Der Drittanbieter-Client muss es vertraulich behandeln: nicht protokollieren und nur in einem sicheren Schlüsselspeicher vorhalten (siehe Abschnitt 10).
+Das Client-Secret wird im T2med-Einrichtungsprozess für den Drittanbieter-Zugriff bereitgestellt. Der Drittanbieter-Client muss es vertraulich behandeln: nicht protokollieren und nur in einem sicheren Schlüsselspeicher vorhalten (siehe Abschnitt 10).
 
 Die Client-Authentifizierung erfolgt bei **allen** Aufrufen (`device_authorization`, Token-Polling und Refresh) über den Header `Authorization: Basic base64(client_id:client_secret)`. Das Client-Secret gehört **nicht** in den Request-Body — dieser enthält nur `client_id` und `scope` (bzw. beim Token-Aufruf `grant_type` und `device_code`). Wird das Secret im Body mitgesendet, lehnt der Auth-Server den Aufruf mit `{"error":"invalid_client"}` ab.
 
@@ -79,6 +80,8 @@ Die Client-Authentifizierung erfolgt bei **allen** Aufrufen (`device_authorizati
 
 Nach erfolgreichem Token-Erhalt kann der Client die FHIR-API mit dem erhaltenen Access-Token (`Authorization: Bearer <access_token>`) identisch zum klassischen Deep-Link-Pfad nutzen. Alle FHIR-Operationen stehen unverändert zur Verfügung.
 
+Anders als beim Deep-Link-Start liefert T2med beim Device Flow keinen Kontext mit. Der Client wählt den Patienten selbst (z. B. über `GET /Patient?family=...` oder `POST /Patient`) und kann ihn im Verlauf auch wechseln. Für jeden Patienten, zu dem kontextgebundene Ressourcen geschrieben werden sollen, legt der Client per `POST /Encounter` einen eigenen Kontext an (siehe Abschnitt 5.1a).
+
 ### Optional: Automatische Wiederverbindung per Refresh-Token
 
 Liefert der Token-Endpoint einen `refresh_token`, kann ein Drittanbieter-Client diesen nutzen, um nach einem Neustart ohne erneute Browser-Autorisierung ein neues Access-Token zu beziehen (`grant_type=refresh_token`, `Authorization: Basic` aus Client ID und Client-Secret). Das Access-Token selbst ist kurzlebig und sollte nicht dauerhaft gespeichert werden. Ist der Refresh-Token abgelaufen oder ungültig, muss der Device Flow erneut durchlaufen werden.
@@ -87,26 +90,26 @@ Liefert der Token-Endpoint einen `refresh_token`, kann ein Drittanbieter-Client 
 
 ## 2. Voraussetzungen
 
-### 2.1 Serverseitig (APS)
+### 2.1 Serverseitig (T2med)
 
 | Voraussetzung | Wert |
 | --- | --- |
 | FHIR-Servlet | unter `/aps/fhir/api/r4` erreichbar |
-| Drittanbieter | in APS aktiviert |
+| Drittanbieter | in T2med aktiviert |
 
 ### 2.2 Drittanbieter-seitig
 
 | Voraussetzung | Erwartung |
 | --- | --- |
 | FHIR-Client | HTTPS-Client für FHIR R4 |
-| Lokale HTTPS-Endpunkte | lokale APS-Server-URLs werden unterstützt |
-| Lokale Zertifikate | installationsspezifische APS-Server-Zertifikate werden unterstützt |
+| Lokale HTTPS-Endpunkte | lokale T2med-Server-URLs werden unterstützt |
+| Lokale Zertifikate | installationsspezifische T2med-Server-Zertifikate werden unterstützt |
 | Pflichtheader serverseitig | `X-API-Key`, `Authorization: Bearer` (siehe Migrationshinweis in Abschnitt 3) |
 | Optionale Serverheader | `X-TreatWarningAsError`, `X-FHIR-Profile` |
 | Optionale Client-Header | `Prefer`, `X-TreatWarningAsError`, `Content-Type` (siehe Abschnitt 3) |
 | Deep-Link-Parameter | `kontextId`, `fhirBasisUrl`, `oAuthToken` |
-| OAuth Client ID | aus der APS-Drittanbieter-Definition (`ClientId`) |
-| OAuth Scope | aktuell in APS festgelegt: `t2med/aps/fhir` |
+| OAuth Client ID | aus der T2med-Drittanbieter-Definition (`ClientId`) |
+| OAuth Scope | aktuell in T2med festgelegt: `t2med/aps/fhir` |
 | Fehlerformat | `OperationOutcome` auswerten |
 
 ## 3. Authentifizierung und Header
@@ -141,7 +144,7 @@ Wichtig:
 | Thema | Erklärung |
 | --- | --- |
 | `oAuthToken` | Parametername im Deep Link; enthält das `loginToken` aus der Kontext-Boundary. |
-| Leerer Token | Wenn kein `loginToken` erzeugt wird, ersetzt der APS-Client `${oAuthToken}` durch einen leeren Wert. |
+| Leerer Token | Wenn kein `loginToken` erzeugt wird, ersetzt der T2med-Client `${oAuthToken}` durch einen leeren Wert. |
 | `fhirBasisUrl` | Muss unverändert als Basis-URL des FHIR-Clients verwendet werden. |
 
 Typische Fehler:
@@ -178,7 +181,10 @@ Ressourcen:
 | `GET` | `/Patient?family=...&given=...&birthdate=...` | Patient per Name/Geburtsdatum suchen |
 | `GET` | `/Patient/{id}` | Patient lesen |
 | `PUT` | `/Patient/{id}` | Patient aktualisieren |
+| `POST` | `/Encounter` | Kontext anlegen (`createKontext`, v. a. für den Device Flow) |
 | `GET` | `/Encounter/{id}` | Encounter aus Kontext lesen |
+| `GET` | `/EpisodeOfCare/{id}` | Behandlungsfall lesen |
+| `GET` | `/EpisodeOfCare?patient=<patientId>` | Behandlungsfälle eines Patienten suchen, sortiert nach Aktualität |
 | `GET` | `/Organization/{id}` | Organisation lesen |
 | `GET` | `/Organization?name=...&identifier=...` | Organisation nach Name/BSNR suchen |
 | `GET` | `/Organization?practitioner=...` | Organisationen zu Practitioner suchen |
@@ -196,7 +202,8 @@ Profilübersicht:
 | Ressource | Profil | Unterstützte Operationen |
 | --- | --- | --- |
 | Patient | `https://fhir.t2med.de/StructureDefinition/FhirApiPatient\|1.0.0` | `create`, `read`, `update`, `search(identifier)`, `search(family/given/birthdate)` |
-| Encounter | `https://fhir.t2med.de/StructureDefinition/FhirApiEncounter\|1.0.0` | `read` |
+| Encounter | `https://fhir.t2med.de/StructureDefinition/FhirApiEncounter\|1.0.0` | `create`, `read` |
+| EpisodeOfCare | `https://fhir.t2med.de/StructureDefinition/FhirApiEpisodeOfCare\|1.0.0` | `read`, `search(patient)` |
 | Organization | `https://fhir.t2med.de/StructureDefinition/FhirApiOrganization\|1.0.0` | `read`, `search(name/identifier)`, `search(practitioner)` |
 | Practitioner | `https://fhir.t2med.de/StructureDefinition/FhirApiPractitioner\|1.0.0` | `read`, `search(name/identifier)`, registrierter `Organization`-Compartment-Sonderfall |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` | `create` |
@@ -208,7 +215,7 @@ Profilübersicht:
 | DocumentReference | `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceFreitext\|1.0.0` | `create` |
 | DocumentReference | `https://fhir.t2med.de/StructureDefinition/FhirApiDocumentReferenceAnhang\|1.0.0` | `create` |
 
-Kontext-Management und Drittanbieter-Freischaltung erfolgen APS-intern unter `/aps/rest/fhir/api/...`.
+Kontext-Management und Drittanbieter-Freischaltung erfolgen T2med-intern unter `/aps/rest/fhir/api/...`.
 
 ## 5. Empfohlener Integrationsablauf (End-to-End)
 
@@ -216,19 +223,60 @@ Kontext-Management und Drittanbieter-Freischaltung erfolgen APS-intern unter `/a
 
 | Schritt | Beschreibung |
 | --- | --- |
-| Kontextanlage | APS ruft intern `/aps/rest/fhir/api/kontext/anlegen` auf. |
+| Kontextanlage | T2med ruft intern `/aps/rest/fhir/api/kontext/anlegen` auf. |
 | Pflichtfelder | `hersteller`, `produkt`, `patientId`, `arztrolleId`, `behandlungsortId` |
 | Optionales Feld | `behandlungsfallId` |
 | Response | `kontext`, `aufrufUrlTemplate`, `fhirApiBase`, abhängig vom Produkt `loginToken` |
-| Deep Link | APS-Client ersetzt `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}` im `aufrufUrlTemplate`. |
-| `oAuthToken` | Der APS-Client befüllt den Parameter aus dem `loginToken`. |
-| `fhirBasisUrl` | Zusammengesetzt aus APS-Basis-URL und `fhirApiBase`; unverändert im Drittanbieter-Client verwenden. |
+| Deep Link | T2med-Client ersetzt `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}` im `aufrufUrlTemplate`. |
+| `oAuthToken` | Der T2med-Client befüllt den Parameter aus dem `loginToken`. |
+| `fhirBasisUrl` | Zusammengesetzt aus T2med-Basis-URL und `fhirApiBase`; unverändert im Drittanbieter-Client verwenden. |
 
 Beispiel für ein Template:
 
 ```text
 t2demo://?kontextId=${kontextId}&fhirBasisUrl=${fhirBasisUrl}&oAuthToken=${oAuthToken}
 ```
+
+### 5.1a Alternative zu Schritt 1: Kontext selbst anlegen (`createKontext`, Device Flow)
+
+Beim Deep-Link-Start ist der Kontext fest vorgegeben; ein Patientenwechsel führt dort zu einem erneuten Aufruf der Drittanbieter-Software. Beim Einstieg per Device Flow kann der Drittanbieter dagegen selbst Patienten suchen, anlegen und zwischen ihnen wechseln. Damit er nach einem Wechsel kontextgebundene Ressourcen zum neuen Patienten schreiben kann, legt er per `POST /Encounter` einen neuen Kontext an.
+
+Verfügbar ab T2med 26.10.
+
+| Thema | Vorgabe |
+| --- | --- |
+| Endpoint | `POST /aps/fhir/api/r4/Encounter` |
+| Profil | `meta.profile[0] = https://fhir.t2med.de/StructureDefinition/FhirApiEncounter\|1.0.0` |
+| Patient (Pflicht) | `subject.reference = Patient/<patientObjectId>` |
+| Arztrolle (Pflicht) | `participant[].individual.reference = Practitioner/<arztrolleObjectId>` |
+| Behandlungsort (Pflicht) | `serviceProvider.reference = Organization/<behandlungsortObjectId>` |
+| Behandlungsfall (optional) | `episodeOfCare[0].reference = EpisodeOfCare/<behandlungsfallObjectId>` |
+| Erfolg | `201 Created`; die neue Kontext-ID steht im `Location`-Header (`.../Encounter/<KONTEXT_ID>/_history/0`) |
+| Verwendung | Die zurückgegebene Kontext-ID wird wie eine per Deep Link erhaltene `kontextId` verwendet (Kontext-Identifier oder `Encounter/<KONTEXT_ID>`). |
+| Lebensdauer | wie alle Kontexte bis zu 4 Stunden, stündliche Bereinigung (siehe Abschnitt 1) |
+
+IDs für die Pflichtreferenzen ermitteln:
+
+| Bestandteil | Möglichkeit |
+| --- | --- |
+| Patient | `GET /Patient?family=...&given=...&birthdate=...` oder `POST /Patient` |
+| Arztrolle | `GET /Practitioner?name=...&identifier=...` (Name/LANR) |
+| Behandlungsort | `GET /Organization?practitioner=<arztrolleObjectId>` oder `GET /Organization?name=...&identifier=...` (Name/BSNR) |
+| Behandlungsfall | optional `GET /EpisodeOfCare?patient=<patientObjectId>`; das Ergebnis ist nach Aktualität sortiert, der aktuellste Behandlungsfall steht zuerst |
+
+Bestimmung des Behandlungsfalls und Validierung:
+
+| Fall | Verhalten |
+| --- | --- |
+| `subject`, `participant` oder `serviceProvider` fehlt | `400 Bad Request`, es wird kein Kontext angelegt |
+| `episodeOfCare` fehlt | Kein Fehler. T2med übernimmt den Behandlungsfall aus dem jüngsten sichtbaren eAkte-Eintrag des Patienten zur übergebenen Arztrolle und zum übergebenen Behandlungsort. |
+| Kein passender Behandlungsfall ermittelbar | Der Kontext wird trotzdem angelegt (`201`), jedoch ohne Behandlungsfall. Der Hinweis wird aktuell nur serverseitig protokolliert und nicht im `OperationOutcome` zurückgegeben. |
+| Arztrolle oder Behandlungsort für den angemeldeten Benutzer nicht gültig (z. B. nicht lizenziert oder Benutzer arbeitet nicht für den Behandlungsort) | T2med versucht, die fehlenden Angaben aus dem jüngsten passenden eAkte-Eintrag des Patienten zu ergänzen. |
+| Patient, Arztrolle oder Behandlungsort nicht auflösbar | `422 Unprocessable Entity` mit `OperationOutcome`; der vorläufig angelegte Kontext wird wieder entfernt. |
+
+Empfehlung: Den tatsächlich verwendeten Kontext nach der Anlage per `GET /Encounter/<KONTEXT_ID>` prüfen (`subject`, `participant`, `serviceProvider`, `episodeOfCare`). Insbesondere wenn kein Behandlungsfall übergeben wurde, ist nur so erkennbar, ob und welcher Behandlungsfall zugeordnet wurde.
+
+Nach einem Patientenwechsel wird für den neuen Patienten ein neuer Kontext angelegt; der bisherige Kontext kann verworfen werden (siehe Abschnitt 5.5).
 
 ### 5.2 Schritt 2: Optional Patient laden oder validieren
 
@@ -300,6 +348,7 @@ Für `DocumentReference` mit Profil `FhirApiDocumentReferenceAnhang|1.0.0` gilt 
 | --- | --- |
 | Patient | `https://fhir.t2med.de/StructureDefinition/FhirApiPatient\|1.0.0` |
 | Encounter | `https://fhir.t2med.de/StructureDefinition/FhirApiEncounter\|1.0.0` |
+| EpisodeOfCare | `https://fhir.t2med.de/StructureDefinition/FhirApiEpisodeOfCare\|1.0.0` |
 | Organization | `https://fhir.t2med.de/StructureDefinition/FhirApiOrganization\|1.0.0` |
 | Practitioner | `https://fhir.t2med.de/StructureDefinition/FhirApiPractitioner\|1.0.0` |
 | Observation | `https://fhir.t2med.de/StructureDefinition/FhirApiObservationAnamnese\|1.0.0` |
@@ -344,6 +393,8 @@ Implementierungsnahe Besonderheiten:
 | `meta.versionId` im Patient-Response | Der Server liefert `meta.versionId` als vollen Pfad (`{id}/_history/{version}`), nicht als kurze Versionsnummer. Die kurze Versionsnummer für den `If-Match`-Header lässt sich daraus per `IdType(meta.versionId).versionIdPart` extrahieren (ergibt z.B. `"4"` aus `"abc123/_history/4"`). |
 | Warnungen | Ohne `X-TreatWarningAsError: false` werden Warnungen als Fehler behandelt. |
 | Content-Type | Die API akzeptiert `application/fhir+json` und `application/fhir+xml`; `Content-Type` und `Accept` entsprechend dem gewünschten Format setzen. |
+| `POST /Encounter` ohne `episodeOfCare` | Der Behandlungsfall wird aus dem jüngsten passenden eAkte-Eintrag ermittelt. Ist keiner vorhanden, wird der Kontext ohne Behandlungsfall angelegt; eine Warnung erscheint nicht im `OperationOutcome`. Zuordnung per `GET /Encounter/<KONTEXT_ID>` prüfen. |
+| `GET /EpisodeOfCare?patient=...` | Liefert alle Behandlungsfälle des Patienten als Suchmenge, sortiert nach Aktualität. Ist der Patient unbekannt, ist die Suchmenge leer. |
 
 ## 8. Verwendete Code-Systeme (insb. `Condition`)
 
@@ -421,7 +472,7 @@ Sind keine Telefonnummern oder E-Mail-Adressen hinterlegt, enthält die Patient-
 
 Einfache FHIR-Werte (`male`, `female`, `unknown`) werden direkt in `Patient.gender` übertragen. Die deutschen Werte **divers** und **unbestimmt** erfordern zusätzlich die Extension `gender-amtlich-de` auf dem `gender`-Element:
 
-| APS-Wert | `gender` | Extension Code |
+| T2med-Wert | `gender` | Extension Code |
 | --- | --- | --- |
 | männlich | `male` | — |
 | weiblich | `female` | — |
@@ -457,8 +508,8 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 | --- | --- |
 | API-Key | nie im Klartext loggen |
 | Transport | FHIR-Aufrufe über TLS durchführen |
-| Lokaler APS-Server | FHIR-API wird lokal über `https://` bereitgestellt |
-| Zertifikat | APS-Server-Zertifikat wird installationsspezifisch erzeugt |
+| Lokaler T2med-Server | FHIR-API wird lokal über `https://` bereitgestellt |
+| Zertifikat | T2med-Server-Zertifikat wird installationsspezifisch erzeugt |
 | Öffentliche CA | Drittanbieter dürfen keine öffentliche CA-signierte Zertifikatskette voraussetzen |
 | HTTPS-Client | Bei `fhirBasisUrl` mit `https://` eigenen SSL-Kontext bzw. HTTP-Client konfigurieren |
 | Lokale Hosts | `localhost`, `127.0.0.1` und lokal konfigurierte Hostnamen unterstützen |
@@ -466,18 +517,18 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 | Geheimnisse | Client-Secret und Refresh-Token nicht im Klartext ablegen, sondern in einem sicheren Schlüsselspeicher; nicht protokollieren |
 | Kontext-ID | als kurzlebiges technisches Token behandeln |
 | Warnungen | `X-TreatWarningAsError` bewusst setzen |
-| Test-/Demo-API-Key-Limit | Bei Verwendung des Test-/Demo-API-Keys begrenzt der Server auf maximal 100 Aufrufe pro Serverprozess. Nach Erreichen des Limits liefert jeder weitere Aufruf `403 Forbidden`. Der Zähler wird nicht zurückgesetzt — für weitere Tests den APS-Server neu starten. |
+| Test-/Demo-API-Key-Limit | Bei Verwendung des Test-/Demo-API-Keys begrenzt der Server auf maximal 100 Aufrufe pro Serverprozess. Nach Erreichen des Limits liefert jeder weitere Aufruf `403 Forbidden`. Der Zähler wird nicht zurückgesetzt — für weitere Tests den T2med-Server neu starten. |
 
 ## 11. Go-Live-Checkliste
 
 **Klassischer Deep-Link-Pfad:**
-- [ ] Drittanbieter in APS aktiviert
+- [ ] Drittanbieter in T2med aktiviert
 - [ ] API-Key vorhanden und sicher hinterlegt
 - [ ] `drittanbieterKey` bzw. Hersteller/Produkt korrekt konfiguriert
 - [ ] Verarbeitung der Deep-Link-Parameter `kontextId`, `fhirBasisUrl`, `oAuthToken` implementiert
 - [ ] `fhirBasisUrl` unverändert als FHIR-Client-Basis-URL verwendet
-- [ ] Eigener SSL-Kontext/HTTP-Client für lokale `https://`-APS-Server eingerichtet
-- [ ] Test mit installationsspezifischem lokalem APS-Zertifikat durchgeführt
+- [ ] Eigener SSL-Kontext/HTTP-Client für lokale `https://`-T2med-Server eingerichtet
+- [ ] Test mit installationsspezifischem lokalem T2med-Zertifikat durchgeführt
 - [ ] Test mit `localhost`, `127.0.0.1` oder lokal konfiguriertem Hostnamen durchgeführt
 - [ ] Test: Aufruf durch T2med-Client über Deep Link
 - [ ] Test: `GET /Patient?identifier=https://fhir.t2med.de/identifier/kontext|<KONTEXT_ID>`
@@ -490,7 +541,7 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 
 **Zusätzlich bei OAuth Device Flow (Variante B):**
 - [ ] OAuth Device Authorization Endpoint und Token Endpoint bekannt und erreichbar
-- [ ] Client Secret aus APS-Drittanbieter-Einrichtung bereitgestellt
+- [ ] Client Secret aus T2med-Drittanbieter-Einrichtung bereitgestellt
 - [ ] Client Secret und Refresh-Token nur im sicheren Schlüsselspeicher abgelegt, nicht im Klartext
 - [ ] Client Secret wird nicht geloggt
 - [ ] Polling-Verhalten für `authorization_pending`, `slow_down`, `expired_token` und `access_denied` implementiert
@@ -499,6 +550,10 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 - [ ] Automatische Wiederverbindung per Refresh-Token (`grant_type=refresh_token`) geprüft
 - [ ] Test: kompletter Device Flow mit Autorisierung im Browser
 - [ ] Test: Abbruch und erneuter Start des Device Flow
+- [ ] Kontextanlage per `POST /Encounter` implementiert; Kontext-ID aus dem `Location`-Header übernommen
+- [ ] Test: Patientenwechsel mit neuer Kontextanlage und anschließendem Schreiben kontextgebundener Ressourcen
+- [ ] Test: Kontextanlage ohne `episodeOfCare`; zugeordneter Behandlungsfall per `GET /Encounter/<KONTEXT_ID>` geprüft
+- [ ] Test: Fehlerfall mit fehlender Pflichtreferenz (`400`)
 
 ## 12. Schnellstart (Minimalfluss)
 
@@ -525,7 +580,10 @@ Ohne die Extension wird `other` serverseitig als `unbekannt` interpretiert.
 4. Polling: `POST <tokenUrl>` mit demselben `Authorization: Basic`-Header; im Body `grant_type=urn:ietf:params:oauth:grant-type:device_code`, `device_code` und `client_id` — alle `interval` Sekunden.
 5. Bei `authorization_pending`: warten und erneut pollen. Bei `slow_down`: Intervall um 5 Sekunden erhöhen.
 6. Bei `200 OK` mit `access_token`: Token übernehmen, FHIR-Client wie in Variante A initialisieren.
-7. Ab hier identisch mit Variante A: FHIR-Operationen mit `Authorization: Bearer <access_token>` ausführen.
+7. Patient suchen oder anlegen, Arztrolle und Behandlungsort ermitteln (siehe Abschnitt 5.1a).
+8. Kontext per `POST /Encounter` anlegen und die Kontext-ID aus dem `Location`-Header übernehmen.
+9. Ab hier identisch mit Variante A (ab Schritt 5): FHIR-Operationen mit `Authorization: Bearer <access_token>` und der neuen Kontext-ID ausführen.
+10. Bei einem Patientenwechsel Schritt 8 für den neuen Patienten wiederholen.
 
 ## Externe API Request-/Response-Beispiele
 
@@ -533,11 +591,11 @@ Hinweise:
 
 | Thema | Hinweis |
 | --- | --- |
-| Platzhalter | Beispiele verwenden `<HOST>`, `<API_KEY>`, `<KONTEXT_ID>`, `<OAUTH_TOKEN>`. |
+| Platzhalter | Beispiele verwenden `<HOST>`, `<API_KEY>`, `<KONTEXT_ID>`, `<OAUTH_TOKEN>` sowie `<PATIENT_OBJECT_ID>`, `<ARZTROLLE_OBJECT_ID>`, `<BEHANDLUNGSORT_OBJECT_ID>`, `<BEHANDLUNGSFALL_OBJECT_ID>`. |
 | JSON | Für JSON `Content-Type` und `Accept` auf `application/fhir+json` setzen. |
 | XML | Die API akzeptiert alternativ `application/fhir+xml; charset=UTF-8`. |
 | `X-FHIR-Profile` | Bei `create`-Operationen nicht erforderlich; maßgeblich ist `meta.profile`. |
-| Deep Link | Der APS-Client öffnet das `aufrufUrlTemplate` nach Ersetzung von `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}`. |
+| Deep Link | Der T2med-Client öffnet das `aufrufUrlTemplate` nach Ersetzung von `${kontextId}`, `${fhirBasisUrl}`, `${oAuthToken}`. |
 
 ### 1. Externe FHIR-HTTP API (`/aps/fhir/api/r4`)
 
@@ -1028,6 +1086,155 @@ X-API-Key: <API_KEY>
 }
 ```
 
+#### 1.15 Behandlungsfälle eines Patienten suchen
+
+**Request**
+
+```http
+GET https://<HOST>/aps/fhir/api/r4/EpisodeOfCare?patient=<PATIENT_OBJECT_ID>
+Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+X-API-Key: <API_KEY>
+```
+
+**Response (200, Suchergebnis, aktuellster Behandlungsfall zuerst)**
+
+```json
+{
+  "resourceType": "Bundle",
+  "type": "searchset",
+  "entry": [
+    {
+      "resource": {
+        "resourceType": "EpisodeOfCare",
+        "id": "<BEHANDLUNGSFALL_OBJECT_ID>",
+        "meta": {
+          "profile": [
+            "https://fhir.t2med.de/StructureDefinition/FhirApiEpisodeOfCare|1.0.0"
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+#### 1.16 Kontext anlegen (`createKontext`, Encounter)
+
+`episodeOfCare` ist optional und kann entfallen (siehe Abschnitt 5.1a).
+
+**Request**
+
+```http
+POST https://<HOST>/aps/fhir/api/r4/Encounter
+Content-Type: application/fhir+json
+Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+Prefer: return=OperationOutcome
+X-API-Key: <API_KEY>
+X-TreatWarningAsError: true
+
+{
+  "resourceType": "Encounter",
+  "meta": {
+    "profile": [
+      "https://fhir.t2med.de/StructureDefinition/FhirApiEncounter|1.0.0"
+    ]
+  },
+  "subject": {
+    "reference": "Patient/<PATIENT_OBJECT_ID>"
+  },
+  "episodeOfCare": [
+    {
+      "reference": "EpisodeOfCare/<BEHANDLUNGSFALL_OBJECT_ID>"
+    }
+  ],
+  "participant": [
+    {
+      "individual": {
+        "reference": "Practitioner/<ARZTROLLE_OBJECT_ID>"
+      }
+    }
+  ],
+  "serviceProvider": {
+    "reference": "Organization/<BEHANDLUNGSORT_OBJECT_ID>"
+  }
+}
+```
+
+**Response (201)**
+
+```http
+Location: https://<HOST>/aps/fhir/api/r4/Encounter/<KONTEXT_ID>/_history/0
+```
+
+```json
+{
+  "resourceType": "OperationOutcome",
+  "meta": {
+    "profile": [
+      "https://fhir.t2med.de/StructureDefinition/FhirApiOperationOutcome|1.0.0"
+    ]
+  },
+  "issue": [
+    {
+      "severity": "information",
+      "code": "processing"
+    }
+  ]
+}
+```
+
+Die `<KONTEXT_ID>` aus dem `Location`-Header wird anschließend in kontextgebundenen Ressourcen verwendet.
+
+#### 1.17 Kontext lesen (Encounter)
+
+**Request**
+
+```http
+GET https://<HOST>/aps/fhir/api/r4/Encounter/<KONTEXT_ID>
+Accept: application/fhir+json
+Authorization: Bearer <OAUTH_TOKEN>
+X-API-Key: <API_KEY>
+```
+
+**Response (200)**
+
+```json
+{
+  "resourceType": "Encounter",
+  "id": "<KONTEXT_ID>",
+  "meta": {
+    "profile": [
+      "https://fhir.t2med.de/StructureDefinition/FhirApiEncounter|1.0.0"
+    ]
+  },
+  "subject": {
+    "reference": "Patient/<PATIENT_OBJECT_ID>"
+  },
+  "episodeOfCare": [
+    {
+      "reference": "EpisodeOfCare/<BEHANDLUNGSFALL_OBJECT_ID>"
+    }
+  ],
+  "participant": [
+    {
+      "individual": {
+        "reference": "Practitioner/<ARZTROLLE_OBJECT_ID>"
+      }
+    }
+  ],
+  "serviceProvider": {
+    "reference": "Organization/<BEHANDLUNGSORT_OBJECT_ID>"
+  },
+  "period": {
+    "start": "2026-09-23T10:15:00+02:00"
+  }
+}
+```
+
+Ist dem Kontext kein Behandlungsfall zugeordnet, fehlt `episodeOfCare`.
+
 ### 2. Typische Fehlerbeispiele
 
 #### 2.1 Fehlendes oder ungültiges Bearer-Token (401)
@@ -1099,3 +1306,39 @@ WWW-Authenticate: Bearer
   ]
 }
 ```
+
+#### 2.5 Kontextanlage: Pflichtreferenz fehlt (400)
+
+Beispiel für ein `POST /Encounter` ohne `serviceProvider`:
+
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [
+    {
+      "severity": "error",
+      "code": "processing",
+      "diagnostics": "Behandlungsort-Id (service-provider) is missing"
+    }
+  ]
+}
+```
+
+Analog: `Patient-Id (subject) is missing` bzw. `Arztrolle-Id (participant) is missing`.
+
+#### 2.6 Kontextanlage: Kontextbestandteil nicht auflösbar (422)
+
+```json
+{
+  "resourceType": "OperationOutcome",
+  "issue": [
+    {
+      "severity": "error",
+      "code": "processing",
+      "diagnostics": "Es ist ein Fehler beim Erstellen einer Begegnung aufgetreten, der Behandlungsort ist nicht gesetzt."
+    }
+  ]
+}
+```
+
+Analog für Patient und Arztrolle. Der Kontext wird in diesem Fall nicht angelegt.
